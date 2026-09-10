@@ -1,0 +1,172 @@
+{
+  "project_info": {
+    "app_name": "GK GS Masti Store",
+    "app_type": "e-commerce",
+    "theme": "Clean minimal light theme",
+    "tagline": "India & Bihar's Premier Competitive Exam Books & PDF Notes Platform",
+    "exams_covered": [
+      "Bihar Daroga",
+      "Bihar Police",
+      "BPSC Teacher",
+      "BSSC",
+      "Railway RRB NTPC/Group D",
+      "SSC GD & CGL"
+    ]
+  },
+  "brand_identity": {
+    "logo_spec": {
+      "shape": "Circular Badge / Emblem",
+      "text": "GK GS MASTI",
+      "subtext": "OFFICIAL STORE",
+      "colors": {
+        "text_color": "Crimson Red (#DC2626)",
+        "ring_border": "Gold Ring (#D97706 / #F59E0B)",
+        "dots": "Emerald Green (#16A34A)",
+        "badge_bg": "Pure White (#FFFFFF) with subtle radial shadow"
+      },
+      "css_classes": "relative flex items-center justify-center rounded-full border-2 border-amber-500/80 bg-white p-2 shadow-sm"
+    }
+  },
+  "typography": {
+    "font_family_pairings": {
+      "headings": "Cabinet Grotesk, Outfit, sans-serif",
+      "body": "Plus Jakarta Sans, Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1_hero": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight",
+      "h2_section": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "h3_card": "text-lg sm:text-xl font-semibold text-slate-900",
+      "body_text": "text-sm sm:text-base text-slate-600 leading-relaxed",
+      "caption_badge": "text-xs font-semibold uppercase tracking-wider"
+    }
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#DC2626",
+      "hover": "#B91C1C",
+      "light": "#FEF2F2",
+      "border": "#FECACA"
+    },
+    "secondary": {
+      "DEFAULT": "#D97706",
+      "hover": "#B45309",
+      "light": "#FFFBEB",
+      "border": "#FDE68A"
+    },
+    "accent_green": {
+      "DEFAULT": "#16A34A",
+      "light": "#DCFCE7",
+      "text": "#15803D"
+    },
+    "backgrounds": {
+      "app": "#F8FAFC",
+      "card": "#FFFFFF",
+      "alt_section": "#F1F5F9",
+      "hero_gradient": "bg-gradient-to-r from-red-50 via-amber-50/50 to-emerald-50/30"
+    },
+    "neutrals": {
+      "heading": "#0F172A",
+      "body": "#334155",
+      "muted": "#64748B",
+      "border": "#E2E8F0"
+    }
+  },
+  "layout_and_spacing": {
+    "max_width": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "card_padding": "p-5 sm:p-6",
+    "grid_gap": "gap-6 sm:gap-8",
+    "border_radius": "rounded-2xl for cards & modals, rounded-xl for inputs/buttons, rounded-full for badges/pills"
+  },
+  "image_urls": {
+    "hero_banners": [
+      {
+        "url": "https://images.unsplash.com/photo-1544456203-0af5a69f5789?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxib29rcyUyMHN0dWR5JTIwbm90ZXMlMjBjb21wZXRpdGl2ZSUyMGV4YW1zJTIwc3R1ZGVudCUyMHJlYWRpbmclMjBsaWJyYXJ5fGVufDB8fHx8MTc4OTA3MDkyMXww&ixlib=rb-4.1.0&q=85",
+        "alt": "Competitive exam preparation student studying in library",
+        "category": "Hero Banner 1 - General Studies Master Prep"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1741699427788-74db37639fc3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHw0fHxib29rcyUyMHN0dWR5JTIwbm90ZXMlMjBjb21wZXRpdGl2ZSUyMGV4YW1zJTIwc3R1ZGVudCUyMHJlYWRpbmclMjBsaWJyYXJ5fGVufDB8fHx8MTc4OTA3MDkyMXww&ixlib=rb-4.1.0&q=85",
+        "alt": "BPSC & Bihar Daroga toppers note collections",
+        "category": "Hero Banner 2 - Topper Handwritten Notes"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1577036057060-d318e280b0c2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwyfHxib29rcyUyMHN0dWR5JTIwbm90ZXMlMjBjb21wZXRpdGl2ZSUyMGV4YW1zJTIwc3R1ZGVudCUyMHJlYWRpbmclMjBsaWJyYXJ5fGVufDB8fHx8MTc4OTA3MDkyMXww&ixlib=rb-4.1.0&q=85",
+        "alt": "Railway & SSC GD Special Practice Sets",
+        "category": "Hero Banner 3 - Book Bundles"
+      }
+    ],
+    "avatars": [
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200",
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200"
+    ]
+  },
+  "components_and_features": {
+    "sticky_header": {
+      "bg": "bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-50 sticky top-0",
+      "logo": "Circular badge with red bold text 'GK GS MASTI', gold metallic ring border, 3 green accent dots",
+      "mega_dropdowns": [
+        "Notes: Bihar Daroga Handnotes, Bihar Police Quick Revision, BPSC Teacher GS Sets, Railway Science Special, SSC GD One-Liners",
+        "Books: GK GS Master Guide 2026, 50 Practice Sets Book, Previous Years Question Bank, Current Affairs Annual"
+      ],
+      "quick_search": "Search books, exams, authors, PDF notes...",
+      "actions": "Wishlist counter, Cart counter with badge, User profile menu with dashboard toggle"
+    },
+    "floating_whatsapp": {
+      "position": "fixed bottom-6 right-6 z-50",
+      "button_style": "flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105",
+      "label": "Ask on WhatsApp"
+    },
+    "pdf_sample_viewer_modal": {
+      "feature": "Sample PDF Preview Modal for products",
+      "controls": "Page zoom, page counter (Page 1 of 12), watermark 'GK GS MASTI PREVIEW ONLY', and direct 'Buy Full PDF' button"
+    },
+    "customer_dashboard": {
+      "tabs": ["My Orders", "PDF Downloads", "Wishlist", "Profile Settings"],
+      "pdf_library": "Instant download buttons for purchased PDF notes with download counter and expiry date tag"
+    },
+    "admin_dashboard": {
+      "sections": [
+        "Analytics Overview (Total Revenue, Total Books Sold, PDF Downloads, Active Students)",
+        "Product Management (CRUD for Books & PDF Notes, cover upload, PDF file link, price, sample pages)",
+        "Orders Management (Order status update: Processing, Shipped, Delivered, Download Ready)",
+        "Customer List & Activity"
+      ]
+    }
+  },
+  "testing_guidelines": {
+    "required_data_testids": [
+      "header-logo",
+      "nav-dropdown-notes",
+      "nav-dropdown-books",
+      "search-input",
+      "cart-counter-button",
+      "wishlist-counter-button",
+      "user-menu-button",
+      "hero-slider-prev-btn",
+      "hero-slider-next-btn",
+      "product-card-1",
+      "product-add-to-cart-btn",
+      "product-wishlist-btn",
+      "product-sample-pdf-btn",
+      "floating-whatsapp-btn",
+      "pdf-preview-modal",
+      "checkout-coupon-input",
+      "checkout-submit-btn",
+      "customer-dashboard-tab-downloads",
+      "download-pdf-btn-1",
+      "admin-nav-analytics",
+      "admin-nav-products",
+      "admin-add-product-btn"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure all components are implemented using React js with Tailwind CSS styling and Lucide icons.",
+    "Verify sticky header has optical contrast with white background and backdrop blur so menu items remain distinct.",
+    "Implement sample PDF preview modal with interactive page view for books/notes detail view.",
+    "Maintain high contrast for readability (APCA AA compliant).",
+    "Provide clear notification toasts using Sonner for cart actions, wishlist additions, and orders.",
+    "Include sample data preloaded for Bihar Daroga, Bihar Police, BPSC Teacher, BSSC, Railway, and SSC GD books and PDF notes."
+  ]
+}

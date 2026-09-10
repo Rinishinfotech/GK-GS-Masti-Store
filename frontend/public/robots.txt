@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /checkout
+
+Sitemap: https://competitive-prep-hub-10.preview.emergentagent.com/api/sitemap.xml
