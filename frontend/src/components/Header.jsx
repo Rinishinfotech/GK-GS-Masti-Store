@@ -20,16 +20,28 @@ const NavDropdown = ({ label, items, group, testid }) => {
       <ChevronDown className={`h-4 w-4 transition-transform group-hover:rotate-180 ${open ? "rotate-180" : ""}`} />
     </button>
     <div className={`${open ? "visible opacity-100 translate-y-0" : "invisible opacity-0 translate-y-1"} group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all absolute left-0 top-full z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl`}>
-      {items.map((c) => (
-        <Link
-          key={c.id}
-          to={`/category/${group}/${c.slug}`}
-          data-testid={`nav-cat-${group}-${c.slug}`}
-          onClick={() => setOpen(false)}
-          className="block rounded-xl px-4 py-2.5 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
-        >
-          {c.name}
-        </Link>
+      {items.filter((c) => !c.parent_id).map((c) => (
+        <div key={c.id}>
+          <Link
+            to={`/category/${group}/${c.slug}`}
+            data-testid={`nav-cat-${group}-${c.slug}`}
+            onClick={() => setOpen(false)}
+            className="block rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            {c.name}
+          </Link>
+          {items.filter((s) => s.parent_id === c.id).map((s) => (
+            <Link
+              key={s.id}
+              to={`/category/${group}/${s.slug}`}
+              data-testid={`nav-cat-${group}-${s.slug}`}
+              onClick={() => setOpen(false)}
+              className="block rounded-xl py-2 pl-8 pr-4 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              — {s.name}
+            </Link>
+          ))}
+        </div>
       ))}
       {items.length === 0 && <p className="px-4 py-2 text-sm text-slate-400">No categories yet</p>}
     </div>
@@ -183,16 +195,30 @@ export const Header = () => {
         <div className="lg:hidden border-t border-slate-200 bg-white" data-testid="mobile-menu">
           <div className="max-w-7xl mx-auto px-4 py-3 space-y-1">
             <p className="px-2 pt-1 text-xs font-bold uppercase tracking-wider text-amber-600">Exam Notes</p>
-            {notes.map((c) => (
-              <Link key={c.id} to={`/category/notes/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-red-50">
-                {c.name}
-              </Link>
+            {notes.filter((c) => !c.parent_id).map((c) => (
+              <div key={c.id}>
+                <Link to={`/category/notes/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-red-50">
+                  {c.name}
+                </Link>
+                {notes.filter((s) => s.parent_id === c.id).map((s) => (
+                  <Link key={s.id} to={`/category/notes/${s.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl py-2 pl-7 pr-3 text-sm text-slate-500 hover:bg-red-50">
+                    — {s.name}
+                  </Link>
+                ))}
+              </div>
             ))}
             <p className="px-2 pt-3 text-xs font-bold uppercase tracking-wider text-amber-600">Exam Books</p>
-            {books.map((c) => (
-              <Link key={c.id} to={`/category/books/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-red-50">
-                {c.name}
-              </Link>
+            {books.filter((c) => !c.parent_id).map((c) => (
+              <div key={c.id}>
+                <Link to={`/category/books/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-red-50">
+                  {c.name}
+                </Link>
+                {books.filter((s) => s.parent_id === c.id).map((s) => (
+                  <Link key={s.id} to={`/category/books/${s.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl py-2 pl-7 pr-3 text-sm text-slate-500 hover:bg-red-50">
+                    — {s.name}
+                  </Link>
+                ))}
+              </div>
             ))}
           </div>
         </div>

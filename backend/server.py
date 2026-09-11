@@ -208,6 +208,7 @@ class CouponValidateIn(BaseModel):
 class CategoryIn(BaseModel):
     name: str
     group: str  # notes | books
+    parent_id: Optional[str] = None
 
 
 class ProductIn(BaseModel):
@@ -375,10 +376,20 @@ async def list_categories():
 async def create_category(body: CategoryIn, admin=Depends(require_admin)):
     if body.group not in ("notes", "books"):
         raise HTTPException(400, "Group must be 'notes' or 'books'")
+    parent_id = None
+    if body.parent_id:
+        parent = await db.categories.find_one({"id": body.parent_id})
+        if not parent:
+            raise HTTPException(400, "Parent category not found")
+        if parent["group"] != body.group:
+            raise HTTPException(400, "Sub-category must be in the same group as its parent")
+        if parent.get("parent_id"):
+            raise HTTPException(400, "Only one level of sub-categories is allowed")
+        parent_id = parent["id"]
     slug = slugify(body.name)
     if await db.categories.find_one({"slug": slug, "group": body.group}):
         raise HTTPException(400, "Category already exists in this group")
-    cat = {"id": new_id(), "name": body.name.strip(), "slug": slug, "group": body.group, "created_at": now().isoformat()}
+    cat = {"id": new_id(), "name": body.name.strip(), "slug": slug, "group": body.group, "parent_id": parent_id, "created_at": now().isoformat()}
     await db.categories.insert_one(cat)
     cat.pop("_id", None)
     return cat
@@ -394,7 +405,7 @@ async def update_category(cat_id: str, body: CategoryIn, admin=Depends(require_a
 
 @api_router.delete("/admin/categories/{cat_id}")
 async def delete_category(cat_id: str, admin=Depends(require_admin)):
-    await db.categories.delete_one({"id": cat_id})
+    await db.categories.delete_many({"$or": [{"id": cat_id}, {"parent_id": cat_id}]})
     return {"status": "deleted"}
 
 
@@ -417,7 +428,8 @@ async def list_products(
     if category:
         cat = await db.categories.find_one({"slug": category}, {"_id": 0})
         if cat:
-            query["category_id"] = cat["id"]
+            children = await db.categories.find({"parent_id": cat["id"]}, {"_id": 0, "id": 1}).to_list(100)
+            query["category_id"] = {"$in": [cat["id"]] + [c["id"] for c in children]}
     if type in ("physical", "digital", "both"):
         query["type"] = type
     if featured == "true":

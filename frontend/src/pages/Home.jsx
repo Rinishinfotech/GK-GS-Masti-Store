@@ -33,7 +33,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <HeroSlider />
           <div className="mt-6 flex flex-wrap gap-2.5 justify-center pb-4">
-            {notes.map((c, i) => (
+            {notes.filter((c) => !c.parent_id).map((c, i) => (
               <Link
                 key={c.id}
                 to={`/category/notes/${c.slug}`}

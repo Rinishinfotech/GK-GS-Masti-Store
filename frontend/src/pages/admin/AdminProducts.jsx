@@ -254,12 +254,12 @@ const AdminProducts = () => {
                   <option value="">Select category</option>
                   <optgroup label="Notes">
                     {categories.filter((c) => c.group === "notes").map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.parent_id ? "— " : ""}{c.name}</option>
                     ))}
                   </optgroup>
                   <optgroup label="Books">
                     {categories.filter((c) => c.group === "books").map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.parent_id ? "— " : ""}{c.name}</option>
                     ))}
                   </optgroup>
                 </select>
