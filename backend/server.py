@@ -637,15 +637,21 @@ async def create_payment_order(body: PaymentCreateIn, user=Depends(get_current_u
     if order["payment_status"] == "paid":
         raise HTTPException(400, "Order already paid")
     amount_paise = int(round(order["total"] * 100))
+    if amount_paise < 100:
+        raise HTTPException(400, "Order amount too low (minimum Rs.1)")
     if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
         import razorpay
         rz = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-        rzo = rz.order.create({
-            "amount": amount_paise,
-            "currency": "INR",
-            "payment_capture": 1,
-            "receipt": order["order_number"][:40],
-        })
+        try:
+            rzo = rz.order.create({
+                "amount": amount_paise,
+                "currency": "INR",
+                "payment_capture": 1,
+                "receipt": order["order_number"][:40],
+            })
+        except Exception as e:
+            logger.error("Razorpay order creation failed: %s", e)
+            raise HTTPException(500, "Failed to create payment order with Razorpay")
         await db.orders.update_one({"id": order["id"]}, {"$set": {"razorpay_order_id": rzo["id"]}})
         return {"mock": False, "key_id": RAZORPAY_KEY_ID, "razorpay_order_id": rzo["id"], "amount": amount_paise, "currency": "INR"}
     mock_id = "order_mock_" + uuid.uuid4().hex[:16]
@@ -658,6 +664,8 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
     order = await db.orders.find_one({"id": body.order_id, "user_id": user["id"]})
     if not order:
         raise HTTPException(404, "Order not found")
+    if not body.razorpay_payment_id:
+        raise HTTPException(400, "Missing payment id")
     if order["payment_status"] != "paid":
         if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
             import razorpay

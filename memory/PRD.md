@@ -24,6 +24,6 @@ Full e-commerce store for competitive exam books & PDF notes (Bihar Daroga, Biha
 - Seed data: 12 categories (6 exams × notes/books), 12 products, 4 testimonials, 2 coupons.
 
 ## Backlog / Next Tasks
-- P0: Add real Razorpay keys (RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET) to go live; real WhatsApp support number; update robots.txt sitemap URL on custom domain.
+- P0: Swap Razorpay test keys for live keys when ready to accept real payments; real WhatsApp support number; update robots.txt sitemap URL on custom domain.
 - P1: Order emails/notifications (Resend), forgot-password flow, hero banners manageable from admin, coupon admin UI.
 - P2: Pagination on category pages, review moderation, sales charts over time, multi-image product gallery, shipping aggregator API (Shiprocket) for auto tracking.

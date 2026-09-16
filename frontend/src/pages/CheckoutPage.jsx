@@ -10,6 +10,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 
 const emptyAddress = { name: "", mobile: "", line1: "", line2: "", city: "", state: "", pincode: "" };
 
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.body.appendChild(s);
+  });
+
 const MockPaymentModal = ({ open, amount, onSuccess, onCancel }) => {
   const [method, setMethod] = useState("upi");
   const [processing, setProcessing] = useState(false);
@@ -137,6 +147,48 @@ const CheckoutPage = () => {
   const validateAddress = (a) =>
     a.name.trim() && /^\d{10}$/.test(a.mobile.trim()) && a.line1.trim() && a.city.trim() && a.state.trim() && /^\d{6}$/.test(a.pincode.trim());
 
+  const onPaymentSuccess = async (orderId, paymentId, signature) => {
+    try {
+      await api.post("/payments/verify", {
+        order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+      });
+      clear();
+      toast.success("Payment successful! Order confirmed.");
+      navigate("/account?tab=orders");
+    } catch (err) {
+      toast.error(formatApiError(err));
+    }
+  };
+
+  const openRazorpayCheckout = async (order, pay) => {
+    const loaded = await loadRazorpayScript();
+    if (!loaded) {
+      toast.error("Could not load payment gateway. Please check your connection and try again.");
+      return;
+    }
+    const rzp = new window.Razorpay({
+      key: pay.key_id,
+      amount: pay.amount,
+      currency: pay.currency,
+      name: "GK GS Masti Store",
+      description: `Order #${order.order_number}`,
+      order_id: pay.razorpay_order_id,
+      prefill: { name: user?.name || "", email: user?.email || "", contact: address.mobile },
+      theme: { color: "#DC2626" },
+      handler: (resp) =>
+        onPaymentSuccess(order.id, resp.razorpay_payment_id, resp.razorpay_signature),
+      modal: {
+        ondismiss: () => toast.error("Payment cancelled. Your order is saved as pending."),
+      },
+    });
+    rzp.on("payment.failed", (resp) => {
+      toast.error(resp.error?.description || "Payment failed. Please try again.");
+    });
+    rzp.open();
+  };
+
   const placeOrder = async () => {
     if (!validateAddress(address)) {
       toast.error("Please fill a valid delivery address (10-digit mobile, 6-digit pincode)");
@@ -155,26 +207,15 @@ const CheckoutPage = () => {
         coupon: discount > 0 ? coupon : null,
       });
       const { data: pay } = await api.post("/payments/create-order", { order_id: order.id });
-      setPayment({ order, ...pay });
+      if (pay.mock) {
+        setPayment({ order, ...pay });
+      } else {
+        await openRazorpayCheckout(order, pay);
+      }
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
       setPlacing(false);
-    }
-  };
-
-  const onPaymentSuccess = async (paymentId) => {
-    try {
-      await api.post("/payments/verify", {
-        order_id: payment.order.id,
-        razorpay_payment_id: paymentId,
-        razorpay_signature: "mock_signature",
-      });
-      clear();
-      toast.success("Payment successful! Order confirmed.");
-      navigate("/account?tab=orders");
-    } catch (err) {
-      toast.error(formatApiError(err));
     }
   };
 
@@ -261,7 +302,7 @@ const CheckoutPage = () => {
       <MockPaymentModal
         open={!!payment}
         amount={payment ? payment.amount / 100 : 0}
-        onSuccess={onPaymentSuccess}
+        onSuccess={(pid) => onPaymentSuccess(payment.order.id, pid, "mock_signature")}
         onCancel={() => setPayment(null)}
       />
     </div>
