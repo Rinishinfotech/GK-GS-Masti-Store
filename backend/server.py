@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 
 import bcrypt
+import httpx
 import jwt
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -75,6 +76,52 @@ SHIPPING_FEE = 50
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 SUPPORT_WHATSAPP = os.environ.get("SUPPORT_WHATSAPP", "919876543210")
+SHIPROCKET_API_BASE = "https://apiv2.shiprocket.in/v1/external"
+SHIPROCKET_API_EMAIL = os.environ.get("SHIPROCKET_API_EMAIL", "")
+SHIPROCKET_API_PASSWORD = os.environ.get("SHIPROCKET_API_PASSWORD", "")
+SHIPROCKET_PICKUP_LOCATION = os.environ.get("SHIPROCKET_PICKUP_LOCATION", "")
+SHIPROCKET_PICKUP_PINCODE = os.environ.get("SHIPROCKET_PICKUP_PINCODE", "")
+SHIPROCKET_WEBHOOK_SECRET = os.environ.get("SHIPROCKET_WEBHOOK_SECRET", "")
+
+sr_token = None
+sr_token_time = None
+
+
+def shiprocket_enabled():
+    return bool(SHIPROCKET_API_EMAIL and SHIPROCKET_API_PASSWORD and SHIPROCKET_PICKUP_LOCATION)
+
+
+async def sr_login():
+    global sr_token, sr_token_time
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(
+            f"{SHIPROCKET_API_BASE}/auth/login",
+            json={"email": SHIPROCKET_API_EMAIL, "password": SHIPROCKET_API_PASSWORD},
+        )
+        r.raise_for_status()
+        sr_token = r.json()["token"]
+        sr_token_time = now()
+    return sr_token
+
+
+async def sr_request(method: str, path: str, **kwargs):
+    if not sr_token or (now() - sr_token_time).total_seconds() > 9 * 86400:
+        await sr_login()
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.request(
+            method, SHIPROCKET_API_BASE + path,
+            headers={"Authorization": f"Bearer {sr_token}", "Content-Type": "application/json"},
+            **kwargs,
+        )
+        if r.status_code == 401:
+            await sr_login()
+            r = await c.request(
+                method, SHIPROCKET_API_BASE + path,
+                headers={"Authorization": f"Bearer {sr_token}", "Content-Type": "application/json"},
+                **kwargs,
+            )
+        r.raise_for_status()
+        return r.json()
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -697,7 +744,154 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
             }},
         )
     updated = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
+    if updated["payment_status"] == "paid" and updated.get("has_physical"):
+        try:
+            await create_shiprocket_shipment(updated)
+            updated = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
+        except Exception as e:
+            logger.error("Shiprocket shipment failed for %s: %s", updated.get("order_number"), e)
     return {"status": "paid", "order": updated}
+
+
+# ---------------- Shiprocket shipping ----------------
+
+async def sr_assign_awb(order_id: str, shipment_id):
+    data = {"awb_code": "", "courier_name": "", "status": "AWB_FAILED"}
+    try:
+        awb_result = await sr_request("POST", "/courier/assign/awb", json={"shipment_id": int(shipment_id)})
+        awb_data = awb_result.get("response", {}).get("data", {})
+        if awb_data.get("awb_code"):
+            data = {
+                "awb_code": str(awb_data["awb_code"]),
+                "courier_name": awb_data.get("courier_name") or "",
+                "status": "AWB_ASSIGNED",
+            }
+        else:
+            data["awb_error"] = awb_data.get("awb_assign_error") or awb_result.get("message") or "AWB assignment failed"
+    except Exception as e:
+        logger.error("AWB assignment failed for order %s: %s", order_id, e)
+        data["awb_error"] = "AWB assignment request failed"
+    return data
+
+
+async def create_shiprocket_shipment(order: dict):
+    if not shiprocket_enabled():
+        raise HTTPException(400, "Shiprocket is not configured (missing pickup location)")
+    existing = order.get("shiprocket") or {}
+    if existing.get("awb_code"):
+        return existing
+    if existing.get("shipment_id"):
+        awb = await sr_assign_awb(order["id"], existing["shipment_id"])
+        updates = {f"shiprocket.{k}": v for k, v in awb.items()}
+        if awb["awb_code"]:
+            updates["tracking_number"] = awb["awb_code"]
+        await db.orders.update_one({"id": order["id"]}, {"$set": updates})
+        return {**existing, **awb}
+    addr = order["address"]
+    physical_items = [i for i in order["items"] if i["type"] in ("physical", "both")]
+    if not physical_items:
+        raise HTTPException(400, "Order has no physical items to ship")
+    qty = sum(i["qty"] for i in physical_items)
+    name_parts = addr["name"].strip().split(None, 1)
+    sr_body = {
+        "order_id": order["order_number"],
+        "order_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "pickup_location": SHIPROCKET_PICKUP_LOCATION,
+        "billing_customer_name": name_parts[0],
+        "billing_last_name": name_parts[1] if len(name_parts) > 1 else "-",
+        "billing_address": addr["line1"],
+        "billing_address_2": addr.get("line2", ""),
+        "billing_city": addr["city"],
+        "billing_state": addr["state"],
+        "billing_pincode": addr["pincode"],
+        "billing_country": "India",
+        "billing_email": order["user_email"],
+        "billing_phone": addr["mobile"],
+        "shipping_is_billing": True,
+        "order_items": [
+            {"name": i["title"][:100], "sku": i["product_id"][:20], "units": i["qty"], "selling_price": i["price"], "hsn": 4901}
+            for i in physical_items
+        ],
+        "payment_method": "Prepaid",
+        "shipping_charges": order.get("shipping_fee", 0),
+        "sub_total": round(sum(i["price"] * i["qty"] for i in physical_items), 2),
+        "length": 25, "breadth": 18, "height": 6,
+        "weight": max(0.5, round(0.5 * qty, 2)),
+    }
+    created = await sr_request("POST", "/orders/create/adhoc", json=sr_body)
+    shipment_id = created.get("shipment_id")
+    if not shipment_id:
+        raise HTTPException(502, "Shiprocket did not return a shipment id")
+    data = {
+        "shiprocket_order_id": created.get("order_id"),
+        "shipment_id": shipment_id,
+        "awb_code": "",
+        "courier_name": "",
+        "status": "CREATED",
+        "created_at": now().isoformat(),
+    }
+    data.update(await sr_assign_awb(order["id"], shipment_id))
+    await db.orders.update_one(
+        {"id": order["id"]},
+        {"$set": {"shiprocket": data, **({"tracking_number": data["awb_code"]} if data["awb_code"] else {})}},
+    )
+    return data
+
+
+@api_router.get("/orders/{order_id}/tracking")
+async def track_order(order_id: str, user=Depends(get_current_user)):
+    order = await db.orders.find_one({"id": order_id, "user_id": user["id"]})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    sr = order.get("shiprocket") or {}
+    if not sr.get("awb_code"):
+        return {"available": False, "message": "Shipment is being prepared. Tracking activates once a courier is assigned.", "shiprocket": sr}
+    if not shiprocket_enabled():
+        return {"available": False, "message": "Tracking temporarily unavailable", "shiprocket": sr}
+    try:
+        data = await sr_request("GET", f"/courier/track/awb/{sr['awb_code']}")
+    except Exception:
+        return {"available": False, "message": "Tracking temporarily unavailable", "shiprocket": sr}
+    tracking = data.get("tracking_data") or {}
+    activities = [
+        {"date": t.get("date"), "status": t.get("activity") or t.get("sr_status_label"), "location": t.get("location")}
+        for t in (tracking.get("shipment_track_activities") or [])[:10]
+    ]
+    return {
+        "available": True,
+        "current_status": tracking.get("shipment_track", [{}])[0].get("current_status") or sr.get("status"),
+        "awb_code": sr["awb_code"],
+        "courier_name": sr.get("courier_name", ""),
+        "eta": tracking.get("etd"),
+        "activities": activities,
+    }
+
+
+@api_router.post("/shiprocket/webhook")
+async def shiprocket_webhook(request: Request):
+    if request.headers.get("x-api-key") != SHIPROCKET_WEBHOOK_SECRET:
+        raise HTTPException(401, "Invalid webhook key")
+    event = await request.json()
+    order_number = str(event.get("order_id") or "")
+    awb = str(event.get("awb") or "")
+    status_raw = (event.get("current_status") or "").lower()
+    updates = {"shiprocket.last_event_status": event.get("current_status"), "shiprocket.webhook_at": now().isoformat()}
+    mapped = None
+    if "delivered" in status_raw:
+        mapped = "delivered"
+    elif "rto" in status_raw or "returned" in status_raw:
+        mapped = "returned"
+    elif "cancel" in status_raw:
+        mapped = "cancelled"
+    elif any(k in status_raw for k in ("shipped", "in transit", "out for delivery", "pickup")):
+        mapped = "shipped"
+    if mapped:
+        updates["status"] = mapped
+    if order_number:
+        await db.orders.update_one({"order_number": order_number}, {"$set": updates})
+    elif awb:
+        await db.orders.update_one({"shiprocket.awb_code": awb}, {"$set": updates})
+    return {"ok": True}
 
 
 # ---------------- Downloads ----------------
@@ -839,6 +1033,24 @@ async def admin_update_order(order_id: str, body: OrderUpdateIn, admin=Depends(r
         if result.matched_count == 0:
             raise HTTPException(404, "Order not found")
     return await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+
+@api_router.post("/admin/orders/{order_id}/ship")
+async def admin_create_shipment(order_id: str, admin=Depends(require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order["payment_status"] != "paid":
+        raise HTTPException(409, "Order is not paid yet")
+    if not order.get("has_physical"):
+        raise HTTPException(400, "Order has no physical items")
+    try:
+        return await create_shiprocket_shipment(order)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Shiprocket error for %s: %s", order.get("order_number"), e)
+        raise HTTPException(502, "Shiprocket API error — check credentials and pickup location")
 
 
 # ---------------- Admin: customers ----------------

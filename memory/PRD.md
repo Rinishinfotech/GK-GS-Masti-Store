@@ -23,6 +23,11 @@ Full e-commerce store for competitive exam books & PDF notes (Bihar Daroga, Biha
 - SEO: dynamic titles/meta/OG per page, /api/sitemap.xml, public/robots.txt, responsive layouts.
 - Seed data: 12 categories (6 exams × notes/books), 12 products, 4 testimonials, 2 coupons.
 
+## Implemented (2026-09-18, iteration 2)
+- Razorpay LIVE (test keys): real Standard Checkout modal, HMAC-SHA256 verify, auto mock fallback if keys removed.
+- Shiprocket shipping: auto shipment creation after payment for physical orders, AWB/courier auto-assign with retry (admin "Create Shiprocket Shipment" button), live tracking in customer My Orders (Track Shipment), webhook POST /api/shiprocket/webhook (x-api-key) auto-updates order status, pickup location "Patna" created via API. AWB blocked until Shiprocket wallet recharge (min Rs.100).
+- Sub-categories: parent_id support, nested header dropdowns/mobile menu, admin "+ Sub Category" flow, parent pages include sub products.
+
 ## Backlog / Next Tasks
 - P0: Swap Razorpay test keys for live keys when ready to accept real payments; real WhatsApp support number; update robots.txt sitemap URL on custom domain.
 - P1: Order emails/notifications (Resend), forgot-password flow, hero banners manageable from admin, coupon admin UI.

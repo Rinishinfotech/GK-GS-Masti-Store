@@ -54,6 +54,20 @@ const AdminOrders = () => {
     }
   };
 
+  const createShipment = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/admin/orders/${selected.id}/ship`);
+      toast.success(data.awb_code ? `Shipment created — AWB ${data.awb_code} (${data.courier_name})` : "Shipment created in Shiprocket");
+      setSelected(null);
+      load();
+    } catch (err) {
+      toast.error(formatApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div data-testid="admin-orders-page">
       <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Orders</h1>
@@ -156,6 +170,34 @@ const AdminOrders = () => {
                     <div className="flex justify-between font-bold text-slate-900"><span>Total</span><span>{inr(selected.total)}</span></div>
                   </div>
                 </div>
+                {selected.has_physical && (
+                  <div className="rounded-xl border border-slate-100 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Shiprocket Shipment</p>
+                    {selected.shiprocket?.shipment_id ? (
+                      <div className="space-y-1 text-xs text-slate-600">
+                        <p>Shipment ID: <span className="font-semibold text-slate-800">{selected.shiprocket.shipment_id}</span></p>
+                        <p>AWB: <span className="font-semibold text-slate-800">{selected.shiprocket.awb_code || "Assigning..."}</span></p>
+                        <p>Courier: <span className="font-semibold text-slate-800">{selected.shiprocket.courier_name || "—"}</span></p>
+                        <p>Status: <span className="font-semibold text-slate-800">{selected.shiprocket.status}</span></p>
+                        {selected.shiprocket.awb_error && (
+                          <p className="text-red-600 font-semibold">Error: {selected.shiprocket.awb_error}</p>
+                        )}
+                      </div>
+                    ) : selected.payment_status === "paid" ? (
+                      <button
+                        data-testid="admin-create-shipment-btn"
+                        onClick={createShipment}
+                        disabled={saving}
+                        className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Create Shiprocket Shipment
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-400">Shipment can be created after payment.</p>
+                    )}
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-600">Order Status</label>

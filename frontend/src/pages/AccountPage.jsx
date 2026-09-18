@@ -19,10 +19,20 @@ const STATUS_STYLES = {
 
 const OrdersTab = () => {
   const [orders, setOrders] = useState(null);
+  const [tracking, setTracking] = useState({});
 
   useEffect(() => {
     api.get("/orders").then((r) => setOrders(r.data)).catch(() => setOrders([]));
   }, []);
+
+  const track = async (o) => {
+    try {
+      const { data } = await api.get(`/orders/${o.id}/tracking`);
+      setTracking((t) => ({ ...t, [o.id]: data }));
+    } catch (err) {
+      toast.error(formatApiError(err));
+    }
+  };
 
   if (orders === null) return <p className="py-10 text-center text-slate-400">Loading orders...</p>;
   if (orders.length === 0)
@@ -69,14 +79,51 @@ const OrdersTab = () => {
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
             <div className="text-xs text-slate-500">
               {o.has_physical && (
-                <span className="flex items-center gap-1">
+                <span className="flex flex-wrap items-center gap-2">
                   <Truck className="h-3.5 w-3.5" />
-                  {o.tracking_number ? `Tracking: ${o.tracking_number}` : "Tracking number will be shared once shipped"}
+                  {o.shiprocket?.awb_code
+                    ? `${o.shiprocket.courier_name || "Courier"} • AWB: ${o.shiprocket.awb_code}`
+                    : o.tracking_number
+                      ? `Tracking: ${o.tracking_number}`
+                      : "Tracking number will be shared once shipped"}
+                  {o.has_physical && o.payment_status === "paid" && (
+                    <button
+                      data-testid="track-order-btn"
+                      onClick={() => track(o)}
+                      className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-200"
+                    >
+                      {tracking[o.id] ? "Refresh Tracking" : "Track Shipment"}
+                    </button>
+                  )}
                 </span>
               )}
             </div>
             <p className="text-sm font-bold text-slate-900">Total: {inr(o.total)}</p>
           </div>
+          {tracking[o.id] && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-4" data-testid="tracking-details">
+              {tracking[o.id].available ? (
+                <>
+                  <p className="text-xs font-bold text-slate-800">
+                    Live Status: <span className="text-red-600">{tracking[o.id].current_status}</span>
+                    {tracking[o.id].eta && <span className="ml-2 font-semibold text-slate-500">ETA: {tracking[o.id].eta}</span>}
+                  </p>
+                  {tracking[o.id].activities?.length > 0 && (
+                    <ul className="mt-2 space-y-1.5">
+                      {tracking[o.id].activities.map((a, i) => (
+                        <li key={i} className="flex gap-2 text-[11px] text-slate-600">
+                          <span className="shrink-0 font-semibold text-slate-400">{a.date}</span>
+                          <span>{a.status}{a.location ? ` — ${a.location}` : ""}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">{tracking[o.id].message}</p>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>
