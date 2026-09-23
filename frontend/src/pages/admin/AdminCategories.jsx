@@ -200,7 +200,7 @@ const AdminCategories = () => {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <GroupList title="Class Notes" items={notes} />
-        <GroupList title="Exam Books Categories" items={books} />
+        <GroupList title="Exam Books" items={books} />
       </div>
     </div>
   );
