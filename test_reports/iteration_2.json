@@ -1,0 +1,28 @@
+{
+  "summary": "Razorpay bug-fix verification round PASSED. Verified via curl: POST /api/payments/create-order now returns mock:false, key_id=rzp_test_TehJHz2AvNvhUX, real Razorpay order id (e.g. order_TfQDwVAdTijfY5), amount in paise. Verified via Playwright E2E: logged in as learner@test.com, added SSC GD Complete Book+PDF Combo (physical) to cart, cart showed subtotal ₹449 + shipping ₹50 = ₹499 (correct, physical book so ₹50 shipping applied), coupon WELCOME10 applied -₹44.9 (10% off, correct), clicked checkout-submit-btn -> REAL Razorpay Standard Checkout modal opened (iframe from api.razorpay.com/v1/checkout/public) showing 'GK GS Masti Store', 'Price Summary 454.1', 'Secured by Razorpay', Test Mode badge, and Contact details form. NO 'Failed to create payment order with Razorpay' error appeared. NO mock-payment-modal appeared (confirming live keys are loaded). After abandoning modal, order GKGS1016 exists in My Orders with PENDING status/PENDING payment_status as expected. Homepage regression: 11 product cards render, Notes dropdown has 6 items, Books dropdown has 8 items - all working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "No new code-review issues; iteration_1 comments still stand (server.py 1110 lines could be split into routers; verify_payment could additionally cross-check the persisted razorpay_order_id against the payload in live mode as a defense-in-depth measure)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (Razorpay create-order live, mock:false, real order id returned)", "frontend": "100% (Razorpay modal opens on checkout, coupon works, cart totals correct, orders list correct)"},
+  "test_credentials": "learner@test.com / test123 works; admin palakneuroclinic@gmail.com / Admin@123 unchanged.",
+  "seed_data_creation": "Test created one live-mode pending order GKGS1016 (₹454.1, SSC GD Combo) and one earlier test order GKGS1015 (₹149 digital) during curl regression - both remain in learner@test.com history as pending. Safe to leave.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Razorpay is LIVE (test keys rzp_test_TehJHz2AvNvhUX in backend/.env). Do NOT complete a real payment in the Razorpay modal during automated tests - opening the modal is sufficient to prove server-side order creation works. Pressing Escape does NOT always trigger the Razorpay ondismiss handler in headless Chromium (so 'Payment cancelled' toast could not be observed via Escape; the ondismiss handler still exists in CheckoutPage.jsx openRazorpayCheckout). Console noise inside the Razorpay iframe (Mixed Content warnings for its own CDN icons http://localhost:*, Permissions policy accelerometer/devicemotion, 'Refused to get unsafe header x-rtb-fingerprint-id') is internal to Razorpay checkout.js and NOT an app bug. Product detail add-to-cart selector is [data-testid='product-add-to-cart-btn'] (NOT 'add-to-cart-btn').",
+  "rca of the issue": "Original bug 'Failed to create payment order with Razorpay' was caused by rotated/invalidated Razorpay API keys (rzp_test_TckgIhVMYKsKu6 returned 'Authentication failed'). Main agent fixed by replacing RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET in /app/backend/.env with fresh working test keys (rzp_test_TehJHz2AvNvhUX). Verified: backend Orders API accepts requests, returns real Razorpay order id, and frontend successfully opens Standard Checkout modal. Bug is FIXED."
+}
