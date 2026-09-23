@@ -199,7 +199,7 @@ const AdminCategories = () => {
       </form>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <GroupList title="Exam Notes Categories" items={notes} />
+        <GroupList title="Class Notes" items={notes} />
         <GroupList title="Exam Books Categories" items={books} />
       </div>
     </div>
