@@ -258,6 +258,10 @@ class CategoryIn(BaseModel):
     parent_id: Optional[str] = None
 
 
+class ReorderIn(BaseModel):
+    ordered_ids: List[str]
+
+
 class ProductIn(BaseModel):
     title: str
     description: str = ""
@@ -416,7 +420,7 @@ async def update_profile(body: ProfileIn, user=Depends(get_current_user)):
 
 @api_router.get("/categories")
 async def list_categories():
-    return await db.categories.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    return await db.categories.find({}, {"_id": 0}).sort([("position", 1), ("name", 1)]).to_list(500)
 
 
 @api_router.post("/admin/categories")
@@ -436,7 +440,8 @@ async def create_category(body: CategoryIn, admin=Depends(require_admin)):
     slug = slugify(body.name)
     if await db.categories.find_one({"slug": slug, "group": body.group}):
         raise HTTPException(400, "Category already exists in this group")
-    cat = {"id": new_id(), "name": body.name.strip(), "slug": slug, "group": body.group, "parent_id": parent_id, "created_at": now().isoformat()}
+    position = await db.categories.count_documents({"group": body.group, "parent_id": parent_id})
+    cat = {"id": new_id(), "name": body.name.strip(), "slug": slug, "group": body.group, "parent_id": parent_id, "position": position, "created_at": now().isoformat()}
     await db.categories.insert_one(cat)
     cat.pop("_id", None)
     return cat
@@ -448,6 +453,13 @@ async def update_category(cat_id: str, body: CategoryIn, admin=Depends(require_a
     if result.matched_count == 0:
         raise HTTPException(404, "Category not found")
     return await db.categories.find_one({"id": cat_id}, {"_id": 0})
+
+
+@api_router.post("/admin/categories/reorder")
+async def reorder_categories(body: ReorderIn, admin=Depends(require_admin)):
+    for idx, cid in enumerate(body.ordered_ids):
+        await db.categories.update_one({"id": cid}, {"$set": {"position": idx}})
+    return {"status": "reordered"}
 
 
 @api_router.delete("/admin/categories/{cat_id}")
@@ -1203,6 +1215,17 @@ async def seed_data():
                     "created_at": now().isoformat(),
                 })
         logger.info("Seeded categories")
+
+    missing_pos = await db.categories.find({"position": {"$exists": False}}).sort("created_at", 1).to_list(500)
+    if missing_pos:
+        scopes = {}
+        for c in missing_pos:
+            key = (c["group"], c.get("parent_id"))
+            scopes.setdefault(key, []).append(c["id"])
+        for (grp, pid), ids in scopes.items():
+            base = await db.categories.count_documents({"group": grp, "parent_id": pid, "position": {"$exists": True}})
+            for idx, cid in enumerate(ids):
+                await db.categories.update_one({"id": cid}, {"$set": {"position": base + idx}})
 
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_many([

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2, CornerDownRight } from "lucide-react";
+import { Plus, Trash2, Loader2, CornerDownRight, ArrowUp, ArrowDown } from "lucide-react";
 import { api, formatApiError } from "../../lib/api";
 import { useCategories } from "../../hooks/useCategories";
 
@@ -53,6 +53,42 @@ const AdminCategories = () => {
 
   const parentOptions = (group === "notes" ? notes : books).filter((c) => !c.parent_id);
 
+  const move = async (siblings, idx, dir) => {
+    const target = idx + dir;
+    if (target < 0 || target >= siblings.length) return;
+    const ids = siblings.map((c) => c.id);
+    [ids[idx], ids[target]] = [ids[target], ids[idx]];
+    try {
+      await api.post("/admin/categories/reorder", { ordered_ids: ids });
+      await reload();
+    } catch (err) {
+      toast.error(formatApiError(err));
+    }
+  };
+
+  const MoveButtons = ({ siblings, idx }) => (
+    <span className="flex flex-col">
+      <button
+        onClick={() => move(siblings, idx, -1)}
+        disabled={idx === 0}
+        className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30"
+        data-testid="category-move-up-btn"
+        aria-label="Move up"
+      >
+        <ArrowUp className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => move(siblings, idx, 1)}
+        disabled={idx === siblings.length - 1}
+        className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30"
+        data-testid="category-move-down-btn"
+        aria-label="Move down"
+      >
+        <ArrowDown className="h-3.5 w-3.5" />
+      </button>
+    </span>
+  );
+
   const GroupList = ({ title, items }) => {
     const parents = items.filter((c) => !c.parent_id);
     const childrenOf = (pid) => items.filter((c) => c.parent_id === pid);
@@ -61,12 +97,15 @@ const AdminCategories = () => {
         <h2 className="font-heading text-lg font-bold text-slate-900">{title}</h2>
         <div className="mt-3 space-y-2">
           {parents.length === 0 && <p className="text-sm text-slate-400">No categories</p>}
-          {parents.map((c) => (
+          {parents.map((c, idx) => (
             <div key={c.id}>
               <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-2.5" data-testid="admin-category-row">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{c.name}</p>
-                  <p className="text-xs text-slate-400">/category/{c.group}/{c.slug}</p>
+                <div className="flex items-center gap-2">
+                  <MoveButtons siblings={parents} idx={idx} />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{c.name}</p>
+                    <p className="text-xs text-slate-400">/category/{c.group}/{c.slug}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -81,9 +120,10 @@ const AdminCategories = () => {
                   </button>
                 </div>
               </div>
-              {childrenOf(c.id).map((s) => (
+              {childrenOf(c.id).map((s, sIdx) => (
                 <div key={s.id} className="ml-6 mt-2 flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50/40 px-4 py-2" data-testid="admin-subcategory-row">
                   <div className="flex items-center gap-2">
+                    <MoveButtons siblings={childrenOf(c.id)} idx={sIdx} />
                     <CornerDownRight className="h-3.5 w-3.5 text-amber-500" />
                     <div>
                       <p className="text-sm font-semibold text-slate-700">{s.name}</p>
