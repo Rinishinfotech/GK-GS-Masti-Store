@@ -25,49 +25,47 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
-STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 APP_NAME = "gkgsmasti"
-storage_key = None
+LOCAL_STORAGE_DIR = "/app/storage"
 
 
 def init_storage(force: bool = False):
-    global storage_key
-    if storage_key and not force:
-        return storage_key
-    import requests as _requests
-    resp = _requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
-    resp.raise_for_status()
-    storage_key = resp.json()["storage_key"]
-    return storage_key
+    os.makedirs(LOCAL_STORAGE_DIR, exist_ok=True)
+    return LOCAL_STORAGE_DIR
 
 
 def put_object(path: str, data: bytes, content_type: str) -> str:
-    import requests as _requests
-    for attempt in range(2):
-        key = init_storage(force=attempt > 0)
-        resp = _requests.put(
-            f"{STORAGE_URL}/objects/{path}",
-            headers={"X-Storage-Key": key, "Content-Type": content_type},
-            data=data,
-            timeout=120,
-        )
-        if resp.status_code != 404:
-            break
-    resp.raise_for_status()
-    return resp.json()["path"]
+    base_dir = os.path.abspath(LOCAL_STORAGE_DIR)
+    file_path = os.path.abspath(os.path.join(base_dir, path.lstrip("/")))
+
+    if os.path.commonpath([base_dir, file_path]) != base_dir:
+        raise ValueError("Invalid storage path")
+
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    with open(file_path, "wb") as f:
+        f.write(data)
+
+    return path
 
 
 def get_object(path: str):
-    import requests as _requests
-    for attempt in range(2):
-        key = init_storage(force=attempt > 0)
-        resp = _requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
-        if resp.status_code != 404:
-            break
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    import mimetypes
+
+    base_dir = os.path.abspath(LOCAL_STORAGE_DIR)
+    file_path = os.path.abspath(os.path.join(base_dir, path.lstrip("/")))
+
+    if os.path.commonpath([base_dir, file_path]) != base_dir:
+        raise ValueError("Invalid storage path")
+
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found: {path}")
+
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+    return data, content_type
 
 
 JWT_SECRET = os.environ["JWT_SECRET"]

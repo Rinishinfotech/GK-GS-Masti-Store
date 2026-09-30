@@ -86,3 +86,9 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# Production persistent storage
+storage/
+
+# Local deployment backups
+*.backup-before-local-storage
