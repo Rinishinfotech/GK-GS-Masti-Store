@@ -29,6 +29,6 @@ Full e-commerce store for competitive exam books & PDF notes (Bihar Daroga, Biha
 - Sub-categories: parent_id support, nested header dropdowns/mobile menu, admin "+ Sub Category" flow, parent pages include sub products.
 
 ## Backlog / Next Tasks
-- P0: Swap Razorpay test keys for live keys when ready to accept real payments; real WhatsApp support number; update robots.txt sitemap URL on custom domain.
+- P0: Real WhatsApp support number (currently placeholder 919876543210); update robots.txt sitemap URL on custom domain. Razorpay live keys are ACTIVE (2026-10-22) — real payments enabled. Shiprocket wallet recharge (min Rs.100) still pending for AWB assignment.
 - P1: Order emails/notifications (Resend), forgot-password flow, hero banners manageable from admin, coupon admin UI.
 - P2: Pagination on category pages, review moderation, sales charts over time, multi-image product gallery, shipping aggregator API (Shiprocket) for auto tracking.
