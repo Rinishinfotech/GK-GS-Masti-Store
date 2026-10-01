@@ -148,6 +148,21 @@ const AdminProducts = () => {
 
   const typeLabel = { physical: "Book", digital: "PDF", both: "Book+PDF" };
 
+  const flatCats = (grp) => {
+    const list = categories.filter((c) => c.group === grp);
+    const out = [];
+    const walk = (pid, depth) => {
+      list
+        .filter((c) => (c.parent_id || null) === pid)
+        .forEach((c) => {
+          out.push({ ...c, depth });
+          walk(c.id, depth + 1);
+        });
+    };
+    walk(null, 0);
+    return out;
+  };
+
   return (
     <div data-testid="admin-products-page">
       <div className="flex items-center justify-between">
@@ -252,14 +267,14 @@ const AdminProducts = () => {
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                 >
                   <option value="">Select category</option>
-                  <optgroup label="Notes">
-                    {categories.filter((c) => c.group === "notes").map((c) => (
-                      <option key={c.id} value={c.id}>{c.parent_id ? "— " : ""}{c.name}</option>
+                  <optgroup label="Class Notes">
+                    {flatCats("notes").map((c) => (
+                      <option key={c.id} value={c.id}>{c.depth > 0 ? "— ".repeat(c.depth) : ""}{c.name}</option>
                     ))}
                   </optgroup>
-                  <optgroup label="Books">
-                    {categories.filter((c) => c.group === "books").map((c) => (
-                      <option key={c.id} value={c.id}>{c.parent_id ? "— " : ""}{c.name}</option>
+                  <optgroup label="Exam Books">
+                    {flatCats("books").map((c) => (
+                      <option key={c.id} value={c.id}>{c.depth > 0 ? "— ".repeat(c.depth) : ""}{c.name}</option>
                     ))}
                   </optgroup>
                 </select>

@@ -6,6 +6,36 @@ import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useCategories } from "../hooks/useCategories";
 
+const flattenCats = (items) => {
+  const out = [];
+  const walk = (pid, depth) => {
+    items
+      .filter((c) => (c.parent_id || null) === pid)
+      .forEach((c) => {
+        out.push({ ...c, depth });
+        walk(c.id, depth + 1);
+      });
+  };
+  walk(null, 0);
+  return out;
+};
+
+const CatLinks = ({ items, group, close }) =>
+  flattenCats(items).map((c) => (
+    <Link
+      key={c.id}
+      to={`/category/${group}/${c.slug}`}
+      data-testid={`nav-cat-${group}-${c.slug}`}
+      onClick={close}
+      style={{ paddingLeft: `${16 + c.depth * 16}px` }}
+      className={`block rounded-xl py-2.5 pr-4 text-sm hover:bg-red-50 hover:text-red-600 transition-colors ${
+        c.depth === 0 ? "font-semibold text-slate-700" : "text-slate-500"
+      }`}
+    >
+      {c.depth > 0 && "— "}{c.name}
+    </Link>
+  ));
+
 const NavDropdown = ({ label, items, group, testid }) => {
   const [open, setOpen] = useState(false);
   return (
@@ -19,30 +49,8 @@ const NavDropdown = ({ label, items, group, testid }) => {
       {label}
       <ChevronDown className={`h-4 w-4 transition-transform group-hover:rotate-180 ${open ? "rotate-180" : ""}`} />
     </button>
-    <div className={`${open ? "visible opacity-100 translate-y-0" : "invisible opacity-0 translate-y-1"} group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all absolute left-0 top-full z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl`}>
-      {items.filter((c) => !c.parent_id).map((c) => (
-        <div key={c.id}>
-          <Link
-            to={`/category/${group}/${c.slug}`}
-            data-testid={`nav-cat-${group}-${c.slug}`}
-            onClick={() => setOpen(false)}
-            className="block rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
-          >
-            {c.name}
-          </Link>
-          {items.filter((s) => s.parent_id === c.id).map((s) => (
-            <Link
-              key={s.id}
-              to={`/category/${group}/${s.slug}`}
-              data-testid={`nav-cat-${group}-${s.slug}`}
-              onClick={() => setOpen(false)}
-              className="block rounded-xl py-2 pl-8 pr-4 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
-            >
-              — {s.name}
-            </Link>
-          ))}
-        </div>
-      ))}
+    <div className={`${open ? "visible opacity-100 translate-y-0" : "invisible opacity-0 translate-y-1"} group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all absolute left-0 top-full z-50 w-64 max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl`}>
+      <CatLinks items={items} group={group} close={() => setOpen(false)} />
       {items.length === 0 && <p className="px-4 py-2 text-sm text-slate-400">No categories yet</p>}
     </div>
   </div>
@@ -95,8 +103,8 @@ export const Header = () => {
           </Link>
 
           <nav className="hidden lg:flex items-center">
-            <NavDropdown label="Competitive Exam Notes" items={notes} group="notes" testid="nav-dropdown-notes" />
-            <NavDropdown label="Competitive Exam Books" items={books} group="books" testid="nav-dropdown-books" />
+            <NavDropdown label="Class Notes" items={notes} group="notes" testid="nav-dropdown-notes" />
+            <NavDropdown label="Exam Books" items={books} group="books" testid="nav-dropdown-books" />
           </nav>
 
           <form onSubmit={submit} className="hidden md:flex flex-1 max-w-md ml-auto">
@@ -194,32 +202,10 @@ export const Header = () => {
       {mobileOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white" data-testid="mobile-menu">
           <div className="max-w-7xl mx-auto px-4 py-3 space-y-1">
-            <p className="px-2 pt-1 text-xs font-bold uppercase tracking-wider text-amber-600">Exam Notes</p>
-            {notes.filter((c) => !c.parent_id).map((c) => (
-              <div key={c.id}>
-                <Link to={`/category/notes/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-red-50">
-                  {c.name}
-                </Link>
-                {notes.filter((s) => s.parent_id === c.id).map((s) => (
-                  <Link key={s.id} to={`/category/notes/${s.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl py-2 pl-7 pr-3 text-sm text-slate-500 hover:bg-red-50">
-                    — {s.name}
-                  </Link>
-                ))}
-              </div>
-            ))}
+            <p className="px-2 pt-1 text-xs font-bold uppercase tracking-wider text-amber-600">Class Notes</p>
+            <CatLinks items={notes} group="notes" close={() => setMobileOpen(false)} />
             <p className="px-2 pt-3 text-xs font-bold uppercase tracking-wider text-amber-600">Exam Books</p>
-            {books.filter((c) => !c.parent_id).map((c) => (
-              <div key={c.id}>
-                <Link to={`/category/books/${c.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-red-50">
-                  {c.name}
-                </Link>
-                {books.filter((s) => s.parent_id === c.id).map((s) => (
-                  <Link key={s.id} to={`/category/books/${s.slug}`} onClick={() => setMobileOpen(false)} className="block rounded-xl py-2 pl-7 pr-3 text-sm text-slate-500 hover:bg-red-50">
-                    — {s.name}
-                  </Link>
-                ))}
-              </div>
-            ))}
+            <CatLinks items={books} group="books" close={() => setMobileOpen(false)} />
           </div>
         </div>
       )}
