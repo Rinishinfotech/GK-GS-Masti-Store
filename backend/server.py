@@ -434,8 +434,6 @@ async def create_category(body: CategoryIn, admin=Depends(require_admin)):
             raise HTTPException(400, "Parent category not found")
         if parent["group"] != body.group:
             raise HTTPException(400, "Sub-category must be in the same group as its parent")
-        if parent.get("parent_id"):
-            raise HTTPException(400, "Only one level of sub-categories is allowed")
         parent_id = parent["id"]
     slug = slugify(body.name)
     if await db.categories.find_one({"slug": slug, "group": body.group}):
@@ -464,7 +462,13 @@ async def reorder_categories(body: ReorderIn, admin=Depends(require_admin)):
 
 @api_router.delete("/admin/categories/{cat_id}")
 async def delete_category(cat_id: str, admin=Depends(require_admin)):
-    await db.categories.delete_many({"$or": [{"id": cat_id}, {"parent_id": cat_id}]})
+    to_delete = [cat_id]
+    queue = [cat_id]
+    while queue:
+        children = await db.categories.find({"parent_id": {"$in": queue}}, {"_id": 0, "id": 1}).to_list(500)
+        queue = [c["id"] for c in children]
+        to_delete.extend(queue)
+    await db.categories.delete_many({"id": {"$in": to_delete}})
     return {"status": "deleted"}
 
 
@@ -487,8 +491,13 @@ async def list_products(
     if category:
         cat = await db.categories.find_one({"slug": category}, {"_id": 0})
         if cat:
-            children = await db.categories.find({"parent_id": cat["id"]}, {"_id": 0, "id": 1}).to_list(100)
-            query["category_id"] = {"$in": [cat["id"]] + [c["id"] for c in children]}
+            ids = [cat["id"]]
+            queue = [cat["id"]]
+            while queue:
+                children = await db.categories.find({"parent_id": {"$in": queue}}, {"_id": 0, "id": 1}).to_list(500)
+                queue = [c["id"] for c in children if c["id"] not in ids]
+                ids.extend(queue)
+            query["category_id"] = {"$in": ids}
     if type in ("physical", "digital", "both"):
         query["type"] = type
     if featured == "true":

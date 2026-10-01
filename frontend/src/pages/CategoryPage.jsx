@@ -34,7 +34,7 @@ const CategoryPage = () => {
       <SEO title={title} description={`Shop ${title} at GK GS Masti Store - best prices, instant PDF access and fast delivery.`} />
       <div className="rounded-3xl bg-gradient-to-r from-red-50 via-amber-50/60 to-emerald-50/40 border border-slate-200 p-6 sm:p-10">
         <p className="text-xs font-bold uppercase tracking-widest text-amber-600">
-          {group === "notes" ? "Competitive Exam Notes" : "Competitive Exam Books"}
+          {group === "notes" ? "Class Notes" : "Exam Books"}
         </p>
         <h1 className="font-heading mt-2 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
