@@ -300,8 +300,8 @@ const AdminProducts = () => {
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                 >
                   <option value="physical">Physical Book</option>
-                  <option value="digital">Digital PDF</option>
-                  <option value="both">Both (Book + PDF)</option>
+                  <option value="digital">Notes PDF (printed &amp; shipped)</option>
+                  <option value="both">Both (Book + PDF download)</option>
                 </select>
               </div>
               <div>
@@ -332,19 +332,17 @@ const AdminProducts = () => {
                 </>
               )}
             </div>
-            {form.type !== "digital" && (
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Shipping (used for live rate calculation)</p>
-                <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
-                  {[["weight", "Weight (kg)"], ["ship_length", "Length (cm)"], ["ship_breadth", "Breadth (cm)"], ["ship_height", "Height (cm)"]].map(([k, label]) => (
-                    <div key={k}>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
-                      <input data-testid={`product-${k}-input`} type="number" step="0.1" min="0" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" />
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Shipping (used for live rate calculation)</p>
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+                {[["weight", "Weight (kg)"], ["ship_length", "Length (cm)"], ["ship_breadth", "Breadth (cm)"], ["ship_height", "Height (cm)"]].map(([k, label]) => (
+                  <div key={k}>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
+                    <input data-testid={`product-${k}-input`} type="number" step="0.1" min="0" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" />
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
             {form.cover && (
               <img src={imgSrc(form.cover)} alt="cover" className="h-24 w-24 rounded-xl object-cover border border-slate-200" onError={(e) => { e.target.onerror = null; e.target.src = imgSrc(""); }} />
             )}

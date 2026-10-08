@@ -124,7 +124,11 @@ const ProductPage = () => {
             </div>
           )}
 
-          {product.type !== "digital" && (
+          {product.type === "digital" ? (
+            <p className="mt-4 text-sm font-semibold text-emerald-600" data-testid="stock-status">
+              Made to order — printed &amp; shipped to your address
+            </p>
+          ) : (
             <p className={`mt-4 text-sm font-semibold ${outOfStock ? "text-red-600" : "text-emerald-600"}`} data-testid="stock-status">
               {outOfStock ? "Out of stock" : `In stock (${product.stock} available)`}
             </p>
@@ -181,23 +185,19 @@ const ProductPage = () => {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-4 text-xs text-slate-500">
-            {product.type !== "digital" && (
-              <span className="flex items-center gap-1.5"><Truck className="h-4 w-4 text-red-500" /> Home delivery with tracking</span>
-            )}
-            {product.type !== "physical" && (
-              <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-emerald-500" /> Instant PDF access after payment</span>
+            <span className="flex items-center gap-1.5"><Truck className="h-4 w-4 text-red-500" /> Home delivery with tracking</span>
+            {product.type === "both" && (
+              <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-emerald-500" /> PDF copy unlocks instantly after payment</span>
             )}
             <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-amber-500" /> Secure payment</span>
           </div>
 
-          {product.type !== "digital" && (
-            <div className="mt-5 max-w-sm rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <Truck className="h-3.5 w-3.5" /> Check delivery &amp; shipping rate
-              </p>
-              <PincodeChecker compact items={[{ product_id: product.id, qty }]} />
-            </div>
-          )}
+          <div className="mt-5 max-w-sm rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-600">
+              <Truck className="h-3.5 w-3.5" /> Check delivery &amp; shipping rate
+            </p>
+            <PincodeChecker compact items={[{ product_id: product.id, qty }]} />
+          </div>
         </div>
       </div>
 

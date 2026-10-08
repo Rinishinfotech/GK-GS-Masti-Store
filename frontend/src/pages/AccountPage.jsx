@@ -162,7 +162,7 @@ const DownloadsTab = () => {
       <div className="py-14 text-center" data-testid="no-downloads">
         <FileText className="mx-auto h-12 w-12 text-slate-300" />
         <p className="mt-3 font-semibold text-slate-700">No digital materials yet</p>
-        <p className="mt-1 text-sm text-slate-500">Purchased PDF notes will appear here instantly after payment.</p>
+        <p className="mt-1 text-sm text-slate-500">PDF copies included with "Book + PDF" combo purchases appear here after payment.</p>
       </div>
     );
 

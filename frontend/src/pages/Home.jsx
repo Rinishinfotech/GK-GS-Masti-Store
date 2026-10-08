@@ -50,7 +50,7 @@ const Home = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mt-10 grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { icon: Zap, title: "Instant PDF Access", text: "Download notes right after payment" },
+            { icon: Truck, title: "Notes Printed & Shipped", text: "PDF notes printed and delivered to you" },
             { icon: Truck, title: "Fast Book Delivery", text: "Tracked shipping across India" },
             { icon: ShieldCheck, title: "Secure Payments", text: "UPI, cards, netbanking & wallets" },
             { icon: Headset, title: "WhatsApp Support", text: "Quick help for orders & downloads" },

@@ -145,7 +145,7 @@ const CheckoutPage = () => {
 
   const shippingEstimate = quote ? quote.shipping_fee : hasPhysical ? 50 : 0;
   const total = Math.max(0, subtotal - discount) + shippingEstimate;
-  const codEligible = hasPhysical && items.every((i) => i.type === "physical") && config?.shipping?.cod_enabled;
+  const codEligible = hasPhysical && items.every((i) => i.type !== "both") && config?.shipping?.cod_enabled;
 
   useEffect(() => {
     setQuote(null);

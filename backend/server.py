@@ -678,9 +678,8 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             raise HTTPException(400, f"Insufficient stock for {p['title']}")
         price = p.get("discount_price") or p["price"]
         subtotal += price * it.qty
-        if p["type"] in ("physical", "both"):
-            has_physical = True
-        if p["type"] in ("digital", "both"):
+        has_physical = True  # all products are shipped (PDF notes are printed & delivered)
+        if p["type"] == "both":
             has_digital = True
         product_docs.append(p)
         items.append({
@@ -698,13 +697,13 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
     if is_cod:
         if not settings.get("cod_enabled", True):
             raise HTTPException(400, "Cash on Delivery is currently unavailable")
-        if not has_physical or any(p["type"] != "physical" for p in product_docs):
-            raise HTTPException(400, "COD is available only for physical book orders")
+        if not has_physical or any(p["type"] == "both" for p in product_docs):
+            raise HTTPException(400, "COD is not available for Book + PDF combo orders")
     shipping_quote = None
     if has_physical:
         pairs = [
             (p, next(i.qty for i in body.items if i.product_id == p["id"]))
-            for p in product_docs if p["type"] in ("physical", "both")
+            for p in product_docs
         ]
         shipping_quote = await quote_shipping(body.address.pincode.strip(), pairs, is_cod, subtotal - discount)
         if not shipping_quote["serviceable"]:
@@ -814,9 +813,9 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
             except Exception:
                 raise HTTPException(400, "Payment verification failed")
         for item in order["items"]:
-            if item["type"] in ("physical", "both"):
+            if item["type"] in ("physical", "both", "digital"):
                 await db.products.update_one({"id": item["product_id"]}, {"$inc": {"stock": -item["qty"]}})
-            if item["type"] in ("digital", "both"):
+            if item["type"] == "both":
                 await db.entitlements.update_one(
                     {"user_id": user["id"], "product_id": item["product_id"]},
                     {"$setOnInsert": {"id": new_id(), "order_id": order["id"], "granted_at": now().isoformat()}},
@@ -882,7 +881,7 @@ async def create_shiprocket_shipment(order: dict):
         await db.orders.update_one({"id": order["id"]}, {"$set": updates})
         return {**existing, **awb}
     addr = order["address"]
-    physical_items = [i for i in order["items"] if i["type"] in ("physical", "both")]
+    physical_items = list(order["items"])  # all items ship — PDF notes are printed & delivered
     if not physical_items:
         raise HTTPException(400, "Order has no physical items to ship")
     products = await db.products.find({"id": {"$in": [i["product_id"] for i in physical_items]}}).to_list(100)
@@ -1104,13 +1103,13 @@ async def shipping_check(body: ShippingCheckIn):
     subtotal = 0.0
     for it in body.items:
         p = await db.products.find_one({"id": it.product_id, "active": True})
-        if not p or p["type"] not in ("physical", "both"):
+        if not p:
             continue
         pairs.append((p, it.qty))
         subtotal += (p.get("discount_price") or p["price"]) * it.qty
     if not pairs:
         return {"serviceable": True, "digital_only": True, "shipping_fee": 0.0,
-                "message": "Digital order — instant download, no shipping needed"}
+                "message": "Nothing to ship for this selection"}
     quote = await quote_shipping(body.pincode.strip(), pairs, body.cod, subtotal)
     return {**quote, "subtotal": round(subtotal, 2)}
 
