@@ -25,6 +25,9 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 APP_NAME = "gkgsmasti"
 LOCAL_STORAGE_DIR = "/app/storage"
 
@@ -236,6 +239,11 @@ class AddressIn(BaseModel):
     city: str
     state: str
     pincode: str
+    area: str = ""
+    post_office: str = ""
+    police_station: str = ""
+    street: str = ""
+    landmark: str = ""
 
 
 class OrderIn(BaseModel):
@@ -243,6 +251,7 @@ class OrderIn(BaseModel):
     address: AddressIn
     billing: Optional[AddressIn] = None
     coupon: Optional[str] = None
+    payment_method: str = "prepaid"  # prepaid | cod
 
 
 class CouponValidateIn(BaseModel):
@@ -274,6 +283,32 @@ class ProductIn(BaseModel):
     full_pdf: str = ""
     specs: dict = {}
     featured: bool = False
+    weight: Optional[float] = None  # kg
+    length: Optional[float] = None  # cm
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+
+
+class ShippingCheckIn(BaseModel):
+    pincode: str
+    items: List[OrderItemIn]
+    cod: bool = False
+
+
+class ShippingSettingsIn(BaseModel):
+    free_shipping_above: float = 0
+    markup_percent: float = 0
+    markup_flat: float = 0
+    courier_strategy: str = "cheapest"  # cheapest | fastest | manual
+    preferred_courier: str = ""
+    cod_enabled: bool = True
+    cod_charge: float = 0
+    default_weight: float = 0.5
+    default_length: float = 25
+    default_breadth: float = 18
+    default_height: float = 2
+    pickup_pincode: str = ""
+    pickup_location: str = ""
 
 
 class OrderUpdateIn(BaseModel):
@@ -319,11 +354,17 @@ async def root():
 
 @api_router.get("/config")
 async def get_config():
+    settings = await get_shipping_settings()
     return {
         "store_name": "GK GS Masti Store",
         "shipping_fee": SHIPPING_FEE,
         "support_whatsapp": SUPPORT_WHATSAPP,
         "payment_mode": "live" if (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) else "mock",
+        "shipping": {
+            "free_shipping_above": settings.get("free_shipping_above", 0),
+            "cod_enabled": settings.get("cod_enabled", True),
+            "cod_charge": settings.get("cod_charge", 0),
+        },
     }
 
 
@@ -624,6 +665,7 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
     if not body.items:
         raise HTTPException(400, "Cart is empty")
     items = []
+    product_docs = []
     subtotal = 0.0
     has_physical = False
     has_digital = False
@@ -637,10 +679,10 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             raise HTTPException(400, f"Insufficient stock for {p['title']}")
         price = p.get("discount_price") or p["price"]
         subtotal += price * it.qty
-        if p["type"] in ("physical", "both"):
-            has_physical = True
-        if p["type"] in ("digital", "both"):
+        has_physical = True  # all products are shipped (PDF notes are printed & delivered)
+        if p["type"] == "both":
             has_digital = True
+        product_docs.append(p)
         items.append({
             "product_id": p["id"],
             "title": p["title"],
@@ -651,7 +693,25 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             "image": p.get("cover") or (p.get("images") or [""])[0],
         })
     discount, coupon_code = await compute_discount(body.coupon, subtotal) if body.coupon else (0.0, None)
-    shipping = float(SHIPPING_FEE) if has_physical else 0.0
+    is_cod = body.payment_method == "cod"
+    settings = await get_shipping_settings()
+    if is_cod:
+        if not settings.get("cod_enabled", True):
+            raise HTTPException(400, "Cash on Delivery is currently unavailable")
+        if not has_physical or any(p["type"] == "both" for p in product_docs):
+            raise HTTPException(400, "COD is not available for Book + PDF combo orders")
+    shipping_quote = None
+    if has_physical:
+        pairs = [
+            (p, next(i.qty for i in body.items if i.product_id == p["id"]))
+            for p in product_docs
+        ]
+        shipping_quote = await quote_shipping(body.address.pincode.strip(), pairs, is_cod, subtotal - discount)
+        if not shipping_quote["serviceable"]:
+            raise HTTPException(400, shipping_quote.get("message") or "Delivery not available to this pincode")
+        shipping = shipping_quote["shipping_fee"]
+    else:
+        shipping = 0.0
     total = round(subtotal - discount + shipping, 2)
     count = await db.orders.count_documents({})
     order = {
@@ -670,15 +730,22 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
         "billing": (body.billing or body.address).model_dump(),
         "has_physical": has_physical,
         "has_digital": has_digital,
-        "status": "pending",
-        "payment_status": "pending",
-        "payment_method": "razorpay",
+        "status": "confirmed" if is_cod else "pending",
+        "payment_status": "cod" if is_cod else "pending",
+        "payment_method": "cod" if is_cod else "prepaid",
+        "shipping_quote": shipping_quote,
         "razorpay_order_id": None,
         "razorpay_payment_id": None,
         "tracking_number": "",
         "created_at": now().isoformat(),
     }
     await db.orders.insert_one(order)
+    if is_cod:
+        try:
+            await create_shiprocket_shipment(order)
+            order = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
+        except Exception as e:
+            logger.error("Shiprocket shipment failed for %s: %s", order.get("order_number"), e)
     return public_order(order)
 
 
@@ -702,6 +769,8 @@ async def create_payment_order(body: PaymentCreateIn, user=Depends(get_current_u
         raise HTTPException(404, "Order not found")
     if order["payment_status"] == "paid":
         raise HTTPException(400, "Order already paid")
+    if order.get("payment_method") == "cod":
+        raise HTTPException(400, "COD orders do not require online payment")
     amount_paise = int(round(order["total"] * 100))
     if amount_paise < 100:
         raise HTTPException(400, "Order amount too low (minimum Rs.1)")
@@ -720,6 +789,7 @@ async def create_payment_order(body: PaymentCreateIn, user=Depends(get_current_u
             raise HTTPException(500, "Failed to create payment order with Razorpay")
         await db.orders.update_one({"id": order["id"]}, {"$set": {"razorpay_order_id": rzo["id"]}})
         return {"mock": False, "key_id": RAZORPAY_KEY_ID, "razorpay_order_id": rzo["id"], "amount": amount_paise, "currency": "INR"}
+    raise HTTPException(503, "Online payment is not configured")
     mock_id = "order_mock_" + uuid.uuid4().hex[:16]
     await db.orders.update_one({"id": order["id"]}, {"$set": {"razorpay_order_id": mock_id}})
     return {"mock": True, "key_id": "rzp_test_mock", "razorpay_order_id": mock_id, "amount": amount_paise, "currency": "INR"}
@@ -733,6 +803,8 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
     if not body.razorpay_payment_id:
         raise HTTPException(400, "Missing payment id")
     if order["payment_status"] != "paid":
+        if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+            raise HTTPException(503, "Online payment is not configured")
         if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
             import razorpay
             rz = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
@@ -745,9 +817,9 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
             except Exception:
                 raise HTTPException(400, "Payment verification failed")
         for item in order["items"]:
-            if item["type"] in ("physical", "both"):
+            if item["type"] in ("physical", "both", "digital"):
                 await db.products.update_one({"id": item["product_id"]}, {"$inc": {"stock": -item["qty"]}})
-            if item["type"] in ("digital", "both"):
+            if item["type"] == "both":
                 await db.entitlements.update_one(
                     {"user_id": user["id"], "product_id": item["product_id"]},
                     {"$setOnInsert": {"id": new_id(), "order_id": order["id"], "granted_at": now().isoformat()}},
@@ -774,10 +846,13 @@ async def verify_payment(body: PaymentVerifyIn, user=Depends(get_current_user)):
 
 # ---------------- Shiprocket shipping ----------------
 
-async def sr_assign_awb(order_id: str, shipment_id):
+async def sr_assign_awb(order_id: str, shipment_id, courier_id=None):
     data = {"awb_code": "", "courier_name": "", "status": "AWB_FAILED"}
+    payload = {"shipment_id": int(shipment_id)}
+    if courier_id:
+        payload["courier_id"] = int(courier_id)
     try:
-        awb_result = await sr_request("POST", "/courier/assign/awb", json={"shipment_id": int(shipment_id)})
+        awb_result = await sr_request("POST", "/courier/assign/awb", json=payload)
         awb_data = awb_result.get("response", {}).get("data", {})
         if awb_data.get("awb_code"):
             data = {
@@ -794,32 +869,46 @@ async def sr_assign_awb(order_id: str, shipment_id):
 
 
 async def create_shiprocket_shipment(order: dict):
-    if not shiprocket_enabled():
-        raise HTTPException(400, "Shiprocket is not configured (missing pickup location)")
+    settings = await get_shipping_settings()
+    pickup_location = settings.get("pickup_location") or SHIPROCKET_PICKUP_LOCATION
+    if not (SHIPROCKET_API_EMAIL and SHIPROCKET_API_PASSWORD and pickup_location):
+        raise HTTPException(400, "Shiprocket is not configured (missing credentials or pickup location)")
     existing = order.get("shiprocket") or {}
     if existing.get("awb_code"):
         return existing
+    quote_courier = (order.get("shipping_quote") or {}).get("courier_id")
     if existing.get("shipment_id"):
-        awb = await sr_assign_awb(order["id"], existing["shipment_id"])
+        awb = await sr_assign_awb(order["id"], existing["shipment_id"], quote_courier)
         updates = {f"shiprocket.{k}": v for k, v in awb.items()}
         if awb["awb_code"]:
             updates["tracking_number"] = awb["awb_code"]
         await db.orders.update_one({"id": order["id"]}, {"$set": updates})
         return {**existing, **awb}
     addr = order["address"]
-    physical_items = [i for i in order["items"] if i["type"] in ("physical", "both")]
+    physical_items = list(order["items"])  # all items ship — PDF notes are printed & delivered
     if not physical_items:
         raise HTTPException(400, "Order has no physical items to ship")
-    qty = sum(i["qty"] for i in physical_items)
+    products = await db.products.find({"id": {"$in": [i["product_id"] for i in physical_items]}}).to_list(100)
+    pmap = {p["id"]: p for p in products}
+    pairs = [(pmap[i["product_id"]], i["qty"]) for i in physical_items if i["product_id"] in pmap]
+    weight, length, breadth, height = compute_package(pairs, settings) if pairs else (settings["default_weight"], settings["default_length"], settings["default_breadth"], settings["default_height"])
     name_parts = addr["name"].strip().split(None, 1)
+    addr1 = (addr["line1"] + (f", {addr['street']}" if addr.get("street") else ""))[:100]
+    addr2 = ", ".join(x for x in [
+        addr.get("area"),
+        f"PO: {addr['post_office']}" if addr.get("post_office") else "",
+        f"PS: {addr['police_station']}" if addr.get("police_station") else "",
+        addr.get("landmark"),
+        addr.get("line2"),
+    ] if x)[:100]
     sr_body = {
         "order_id": order["order_number"],
         "order_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "pickup_location": SHIPROCKET_PICKUP_LOCATION,
+        "pickup_location": pickup_location,
         "billing_customer_name": name_parts[0],
         "billing_last_name": name_parts[1] if len(name_parts) > 1 else "-",
-        "billing_address": addr["line1"],
-        "billing_address_2": addr.get("line2", ""),
+        "billing_address": addr1,
+        "billing_address_2": addr2,
         "billing_city": addr["city"],
         "billing_state": addr["state"],
         "billing_pincode": addr["pincode"],
@@ -831,11 +920,11 @@ async def create_shiprocket_shipment(order: dict):
             {"name": i["title"][:100], "sku": i["product_id"][:20], "units": i["qty"], "selling_price": i["price"], "hsn": 4901}
             for i in physical_items
         ],
-        "payment_method": "Prepaid",
+        "payment_method": "COD" if order.get("payment_method") == "cod" else "Prepaid",
         "shipping_charges": order.get("shipping_fee", 0),
         "sub_total": round(sum(i["price"] * i["qty"] for i in physical_items), 2),
-        "length": 25, "breadth": 18, "height": 6,
-        "weight": max(0.5, round(0.5 * qty, 2)),
+        "length": length, "breadth": breadth, "height": height,
+        "weight": weight,
     }
     created = await sr_request("POST", "/orders/create/adhoc", json=sr_body)
     shipment_id = created.get("shipment_id")
@@ -849,7 +938,7 @@ async def create_shiprocket_shipment(order: dict):
         "status": "CREATED",
         "created_at": now().isoformat(),
     }
-    data.update(await sr_assign_awb(order["id"], shipment_id))
+    data.update(await sr_assign_awb(order["id"], shipment_id, quote_courier))
     await db.orders.update_one(
         {"id": order["id"]},
         {"$set": {"shiprocket": data, **({"tracking_number": data["awb_code"]} if data["awb_code"] else {})}},
@@ -886,24 +975,28 @@ async def track_order(order_id: str, user=Depends(get_current_user)):
     }
 
 
-@api_router.post("/shiprocket/webhook")
+def map_sr_status(status_raw: str):
+    s = (status_raw or "").lower()
+    if "delivered" in s:
+        return "delivered"
+    if "rto" in s or "returned" in s:
+        return "returned"
+    if "cancel" in s:
+        return "cancelled"
+    if any(k in s for k in ("shipped", "in transit", "out for delivery", "pickup")):
+        return "shipped"
+    return None
+
+
+@api_router.post("/shipping/events")
 async def shiprocket_webhook(request: Request):
     if request.headers.get("x-api-key") != SHIPROCKET_WEBHOOK_SECRET:
         raise HTTPException(401, "Invalid webhook key")
     event = await request.json()
     order_number = str(event.get("order_id") or "")
     awb = str(event.get("awb") or "")
-    status_raw = (event.get("current_status") or "").lower()
     updates = {"shiprocket.last_event_status": event.get("current_status"), "shiprocket.webhook_at": now().isoformat()}
-    mapped = None
-    if "delivered" in status_raw:
-        mapped = "delivered"
-    elif "rto" in status_raw or "returned" in status_raw:
-        mapped = "returned"
-    elif "cancel" in status_raw:
-        mapped = "cancelled"
-    elif any(k in status_raw for k in ("shipped", "in transit", "out for delivery", "pickup")):
-        mapped = "shipped"
+    mapped = map_sr_status(event.get("current_status"))
     if mapped:
         updates["status"] = mapped
     if order_number:
@@ -911,6 +1004,133 @@ async def shiprocket_webhook(request: Request):
     elif awb:
         await db.orders.update_one({"shiprocket.awb_code": awb}, {"$set": updates})
     return {"ok": True}
+
+
+# ---------------- Shipping settings & live rates ----------------
+
+DEFAULT_SHIPPING = {
+    "free_shipping_above": 0,
+    "markup_percent": 0,
+    "markup_flat": 0,
+    "courier_strategy": "cheapest",
+    "preferred_courier": "",
+    "cod_enabled": True,
+    "cod_charge": 0,
+    "default_weight": 0.5,
+    "default_length": 25,
+    "default_breadth": 18,
+    "default_height": 2,
+    "pickup_pincode": "",
+    "pickup_location": "",
+}
+
+
+async def get_shipping_settings():
+    doc = await db.store_settings.find_one({"id": "shipping"}, {"_id": 0})
+    s = {**DEFAULT_SHIPPING, **(doc or {})}
+    s.pop("id", None)
+    if not s.get("pickup_pincode"):
+        s["pickup_pincode"] = SHIPROCKET_PICKUP_PINCODE
+    if not s.get("pickup_location"):
+        s["pickup_location"] = SHIPROCKET_PICKUP_LOCATION
+    return s
+
+
+def compute_package(product_qty_pairs, settings):
+    # books stack flat: heights add up, footprint is the largest book
+    total_weight = round(sum(float(p.get("weight") or settings["default_weight"]) * qty for p, qty in product_qty_pairs), 2)
+    length = max(float(p.get("length") or settings["default_length"]) for p, _ in product_qty_pairs)
+    breadth = max(float(p.get("breadth") or settings["default_breadth"]) for p, _ in product_qty_pairs)
+    height = sum(float(p.get("height") or settings["default_height"]) * qty for p, qty in product_qty_pairs)
+    height = min(max(round(height, 1), settings["default_height"]), 100)
+    return max(total_weight, 0.1), length, breadth, height
+
+
+async def quote_shipping(pincode: str, product_qty_pairs, cod: bool, subtotal: float):
+    settings = await get_shipping_settings()
+    weight, length, breadth, height = compute_package(product_qty_pairs, settings)
+    base = {"weight": weight, "dimensions": {"length": length, "breadth": breadth, "height": height}}
+    threshold = float(settings.get("free_shipping_above") or 0)
+    if threshold > 0 and subtotal >= threshold:
+        return {**base, "serviceable": True, "free_shipping": True, "shipping_fee": 0.0,
+                "courier_name": "Free Shipping", "etd": "", "estimated_days": None, "couriers": []}
+    fallback = {**base, "serviceable": True, "shipping_fee": float(SHIPPING_FEE),
+                "courier_name": "Standard Shipping", "etd": "", "estimated_days": None, "couriers": [], "fallback": True}
+    if not (SHIPROCKET_API_EMAIL and SHIPROCKET_API_PASSWORD and settings.get("pickup_pincode")):
+        return fallback
+    try:
+        data = await sr_request("GET", "/courier/serviceability", params={
+            "pickup_postcode": settings["pickup_pincode"],
+            "delivery_postcode": pincode,
+            "weight": weight,
+            "cod": 1 if cod else 0,
+            "length": length,
+            "breadth": breadth,
+            "height": height,
+            "declared_value": max(int(subtotal), 100),
+        })
+    except Exception as e:
+        logger.error("Shiprocket serviceability failed: %s", e)
+        return fallback
+    couriers = (data.get("data") or {}).get("available_courier_companies") or []
+    if not couriers:
+        return {**base, "serviceable": False, "message": "Delivery is not available to this pincode", "couriers": []}
+    strategy = settings.get("courier_strategy", "cheapest")
+    if strategy == "fastest":
+        selected = min(couriers, key=lambda c: int(c.get("estimated_delivery_days") or 99))
+    elif strategy == "manual" and settings.get("preferred_courier"):
+        pref = settings["preferred_courier"].lower()
+        match = [c for c in couriers if pref in (c.get("courier_name") or "").lower()]
+        selected = match[0] if match else min(couriers, key=lambda c: float(c.get("freight_charge") or c.get("rate") or 0))
+    else:
+        selected = min(couriers, key=lambda c: float(c.get("freight_charge") or c.get("rate") or 0))
+    rate = float(selected.get("freight_charge") or selected.get("rate") or 0)
+    final = rate * (1 + float(settings.get("markup_percent") or 0) / 100) + float(settings.get("markup_flat") or 0)
+    if cod:
+        final += float(settings.get("cod_charge") or 0)
+    slim = [
+        {"courier_name": c.get("courier_name"), "rate": float(c.get("freight_charge") or c.get("rate") or 0),
+         "estimated_days": c.get("estimated_delivery_days"), "etd": c.get("etd")}
+        for c in couriers[:6]
+    ]
+    return {**base, "serviceable": True, "shipping_fee": round(final, 2), "base_rate": rate,
+            "courier_name": selected.get("courier_name"), "courier_id": selected.get("courier_company_id"),
+            "etd": selected.get("etd") or "", "estimated_days": selected.get("estimated_delivery_days"),
+            "couriers": slim}
+
+
+@api_router.post("/shipping/check")
+async def shipping_check(body: ShippingCheckIn):
+    if not re.match(r"^\d{6}$", body.pincode.strip()):
+        raise HTTPException(400, "Enter a valid 6-digit pincode")
+    pairs = []
+    subtotal = 0.0
+    for it in body.items:
+        p = await db.products.find_one({"id": it.product_id, "active": True})
+        if not p:
+            continue
+        pairs.append((p, it.qty))
+        subtotal += (p.get("discount_price") or p["price"]) * it.qty
+    if not pairs:
+        return {"serviceable": True, "digital_only": True, "shipping_fee": 0.0,
+                "message": "Nothing to ship for this selection"}
+    quote = await quote_shipping(body.pincode.strip(), pairs, body.cod, subtotal)
+    return {**quote, "subtotal": round(subtotal, 2)}
+
+
+@api_router.get("/admin/settings/shipping")
+async def admin_get_shipping_settings(admin=Depends(require_admin)):
+    return await get_shipping_settings()
+
+
+@api_router.put("/admin/settings/shipping")
+async def admin_update_shipping_settings(body: ShippingSettingsIn, admin=Depends(require_admin)):
+    if body.courier_strategy not in ("cheapest", "fastest", "manual"):
+        raise HTTPException(400, "Invalid courier strategy")
+    data = body.model_dump()
+    data["id"] = "shipping"
+    await db.store_settings.update_one({"id": "shipping"}, {"$set": data}, upsert=True)
+    return await get_shipping_settings()
 
 
 # ---------------- Downloads ----------------
@@ -1059,7 +1279,7 @@ async def admin_create_shipment(order_id: str, admin=Depends(require_admin)):
     order = await db.orders.find_one({"id": order_id})
     if not order:
         raise HTTPException(404, "Order not found")
-    if order["payment_status"] != "paid":
+    if order["payment_status"] not in ("paid", "cod"):
         raise HTTPException(409, "Order is not paid yet")
     if not order.get("has_physical"):
         raise HTTPException(400, "Order has no physical items")
@@ -1070,6 +1290,92 @@ async def admin_create_shipment(order_id: str, admin=Depends(require_admin)):
     except Exception as e:
         logger.error("Shiprocket error for %s: %s", order.get("order_number"), e)
         raise HTTPException(502, "Shiprocket API error — check credentials and pickup location")
+
+
+@api_router.get("/admin/shiprocket/status")
+async def admin_shiprocket_status(admin=Depends(require_admin)):
+    if not (SHIPROCKET_API_EMAIL and SHIPROCKET_API_PASSWORD):
+        return {"connected": False, "error": "Shiprocket credentials not configured"}
+    try:
+        await sr_login()
+        data = await sr_request("GET", "/settings/company/pickup")
+        pickups = (data.get("data") or {}).get("shipping_address") or []
+        return {
+            "connected": True,
+            "email": SHIPROCKET_API_EMAIL,
+            "pickups": [
+                {"pickup_location": p.get("pickup_location"), "pin_code": p.get("pin_code"),
+                 "city": p.get("city"), "state": p.get("state"), "verified": p.get("pickup_verified")}
+                for p in pickups
+            ],
+        }
+    except Exception as e:
+        return {"connected": False, "error": str(e)[:200]}
+
+
+@api_router.post("/admin/orders/{order_id}/label")
+async def admin_generate_label(order_id: str, admin=Depends(require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    sr = order.get("shiprocket") or {}
+    if not sr.get("shipment_id"):
+        raise HTTPException(400, "No shipment exists for this order")
+    if sr.get("label_url"):
+        return {"label_url": sr["label_url"]}
+    try:
+        result = await sr_request("POST", "/courier/generate/label", json={"shipment_id": [int(sr["shipment_id"])]})
+    except Exception as e:
+        logger.error("Label generation failed for %s: %s", order.get("order_number"), e)
+        raise HTTPException(502, "Shiprocket label generation failed")
+    url = result.get("label_url") or ""
+    if url:
+        await db.orders.update_one({"id": order_id}, {"$set": {"shiprocket.label_url": url}})
+    return {"label_url": url}
+
+
+@api_router.post("/admin/orders/{order_id}/pickup")
+async def admin_schedule_pickup(order_id: str, admin=Depends(require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    sr = order.get("shiprocket") or {}
+    if not sr.get("shipment_id"):
+        raise HTTPException(400, "No shipment exists for this order")
+    try:
+        result = await sr_request("POST", "/courier/generate/pickup", json={"shipment_id": [int(sr["shipment_id"])]})
+    except Exception as e:
+        logger.error("Pickup scheduling failed for %s: %s", order.get("order_number"), e)
+        raise HTTPException(502, "Shiprocket pickup scheduling failed")
+    pickup = result.get("response") or result
+    await db.orders.update_one({"id": order_id}, {"$set": {"shiprocket.pickup": pickup, "shiprocket.pickup_requested_at": now().isoformat()}})
+    return {"status": "pickup_requested", "detail": pickup}
+
+
+@api_router.post("/admin/orders/{order_id}/sync")
+async def admin_sync_shipment(order_id: str, admin=Depends(require_admin)):
+    order = await db.orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    sr = order.get("shiprocket") or {}
+    if not sr.get("shipment_id"):
+        raise HTTPException(400, "No shipment exists for this order")
+    try:
+        if sr.get("awb_code"):
+            data = await sr_request("GET", f"/courier/track/awb/{sr['awb_code']}")
+        else:
+            data = await sr_request("GET", f"/courier/track/shipment/{sr['shipment_id']}")
+    except Exception as e:
+        logger.error("Shipment sync failed for %s: %s", order.get("order_number"), e)
+        raise HTTPException(502, "Shiprocket tracking unavailable")
+    tracking = data.get("tracking_data") or {}
+    current = ((tracking.get("shipment_track") or [{}])[0]).get("current_status") or ""
+    updates = {"shiprocket.last_event_status": current, "shiprocket.synced_at": now().isoformat()}
+    mapped = map_sr_status(current)
+    if mapped:
+        updates["status"] = mapped
+    await db.orders.update_one({"id": order_id}, {"$set": updates})
+    return {"current_status": current, "order_status": mapped or order["status"]}
 
 
 # ---------------- Admin: customers ----------------

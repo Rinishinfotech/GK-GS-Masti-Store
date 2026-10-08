@@ -58,7 +58,7 @@ export function CartProvider({ children }) {
 
   const count = items.reduce((s, i) => s + i.qty, 0);
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const hasPhysical = items.some((i) => i.type === "physical" || i.type === "both");
+  const hasPhysical = items.length > 0; // all products are shipped (PDF notes are printed & delivered)
 
   return (
     <CartContext.Provider value={{ items, add, remove, setQty, clear, count, subtotal, hasPhysical }}>

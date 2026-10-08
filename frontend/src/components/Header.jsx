@@ -40,15 +40,24 @@ const NavDropdown = ({ label, items, group, testid }) => {
   const [open, setOpen] = useState(false);
   return (
   <div className="relative group">
-    <button
-      data-testid={testid}
-      onClick={() => setOpen(!open)}
-      onBlur={() => setTimeout(() => setOpen(false), 150)}
-      className="flex items-center gap-1 px-3 py-2 text-sm font-semibold text-slate-700 hover:text-red-600 transition-colors"
-    >
-      {label}
-      <ChevronDown className={`h-4 w-4 transition-transform group-hover:rotate-180 ${open ? "rotate-180" : ""}`} />
-    </button>
+    <div className="flex items-center">
+      <Link
+        to={`/${group}`}
+        data-testid={testid}
+        className="px-3 py-2 text-sm font-semibold text-slate-700 hover:text-red-600 transition-colors"
+      >
+        {label}
+      </Link>
+      <button
+        data-testid={`${testid}-toggle`}
+        onClick={() => setOpen(!open)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label={`${label} menu`}
+        className="-ml-1 p-1.5 text-slate-500 hover:text-red-600 transition-colors"
+      >
+        <ChevronDown className={`h-4 w-4 transition-transform group-hover:rotate-180 ${open ? "rotate-180" : ""}`} />
+      </button>
+    </div>
     <div className={`${open ? "visible opacity-100 translate-y-0" : "invisible opacity-0 translate-y-1"} group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all absolute left-0 top-full z-50 w-64 max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl`}>
       <CatLinks items={items} group={group} close={() => setOpen(false)} />
       {items.length === 0 && <p className="px-4 py-2 text-sm text-slate-400">No categories yet</p>}

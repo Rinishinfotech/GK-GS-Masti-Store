@@ -8,7 +8,7 @@ const TypeBadge = ({ type }) => {
   if (type === "digital")
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-        <FileText className="h-3 w-3" /> PDF
+        <FileText className="h-3 w-3" /> Printed Notes
       </span>
     );
   if (type === "both")

@@ -1,11 +1,12 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { LayoutDashboard, Package, FolderTree, ShoppingBag, Users, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, Package, FolderTree, ShoppingBag, Users, ArrowLeft, Truck } from "lucide-react";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true, testid: "admin-nav-analytics" },
   { to: "/admin/products", label: "Products", icon: Package, testid: "admin-nav-products" },
   { to: "/admin/categories", label: "Categories", icon: FolderTree, testid: "admin-nav-categories" },
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag, testid: "admin-nav-orders" },
+  { to: "/admin/shipping", label: "Shipping", icon: Truck, testid: "admin-nav-shipping" },
   { to: "/admin/customers", label: "Customers", icon: Users, testid: "admin-nav-customers" },
 ];
 

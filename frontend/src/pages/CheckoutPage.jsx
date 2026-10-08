@@ -8,7 +8,21 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
-const emptyAddress = { name: "", mobile: "", line1: "", line2: "", city: "", state: "", pincode: "" };
+const emptyAddress = { name: "", mobile: "", line1: "", city: "", state: "", area: "", post_office: "", police_station: "", street: "", landmark: "", pincode: "" };
+
+const ADDRESS_FIELDS = [
+  ["name", "Full Name", true],
+  ["mobile", "Phone Number", true],
+  ["line1", "Address Line 1", true],
+  ["city", "City", true],
+  ["state", "State", true],
+  ["area", "Area / Village (mohalla or area name)", true],
+  ["post_office", "Post Office", true],
+  ["police_station", "Police Station", true],
+  ["street", "House / Street (optional)", false],
+  ["landmark", "Landmark (optional)", false],
+  ["pincode", "Pincode", true],
+];
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -83,21 +97,13 @@ const MockPaymentModal = ({ open, amount, onSuccess, onCancel }) => {
 
 const AddressForm = ({ value, onChange, prefix }) => (
   <div className="grid gap-3 sm:grid-cols-2">
-    {[
-      ["name", "Full Name", "text"],
-      ["mobile", "Mobile Number", "tel"],
-      ["line1", "Address Line 1", "text"],
-      ["line2", "Address Line 2 (optional)", "text"],
-      ["city", "City", "text"],
-      ["state", "State", "text"],
-      ["pincode", "Pincode", "text"],
-    ].map(([key, label, type]) => (
-      <div key={key} className={key === "line1" || key === "line2" ? "sm:col-span-2" : ""}>
+    {ADDRESS_FIELDS.map(([key, label, required]) => (
+      <div key={key} className={key === "line1" ? "sm:col-span-2" : ""}>
         <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
         <input
           data-testid={`${prefix}-${key}-input`}
-          type={type}
-          value={value[key]}
+          type="text"
+          value={value[key] || ""}
           onChange={(e) => onChange({ ...value, [key]: e.target.value })}
           className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/40"
         />
@@ -117,6 +123,14 @@ const CheckoutPage = () => {
   const [discount, setDiscount] = useState(0);
   const [placing, setPlacing] = useState(false);
   const [payment, setPayment] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("prepaid");
+  const [config, setConfig] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+
+  useEffect(() => {
+    api.get("/config").then((r) => setConfig(r.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -129,8 +143,30 @@ const CheckoutPage = () => {
     if (user && items.length === 0 && !payment) navigate("/cart");
   }, [user, items, navigate, payment]);
 
-  const shipping = hasPhysical ? 50 : 0;
-  const total = Math.max(0, subtotal - discount) + shipping;
+  const shippingEstimate = quote ? quote.shipping_fee : hasPhysical ? 50 : 0;
+  const total = Math.max(0, subtotal - discount) + shippingEstimate;
+  const codEligible = hasPhysical && items.every((i) => i.type !== "both") && config?.shipping?.cod_enabled;
+
+  useEffect(() => {
+    setQuote(null);
+    if (!hasPhysical || !/^\d{6}$/.test(address.pincode || "")) return;
+    const t = setTimeout(async () => {
+      setQuoteLoading(true);
+      try {
+        const { data } = await api.post("/shipping/check", {
+          pincode: address.pincode,
+          items: items.map((i) => ({ product_id: i.product_id, qty: i.qty })),
+          cod: paymentMethod === "cod",
+        });
+        setQuote(data);
+      } catch {
+        setQuote(null);
+      } finally {
+        setQuoteLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [address.pincode, items, hasPhysical, paymentMethod]);
 
   const applyCoupon = async () => {
     if (!coupon.trim()) return;
@@ -145,7 +181,8 @@ const CheckoutPage = () => {
   };
 
   const validateAddress = (a) =>
-    a.name.trim() && /^\d{10}$/.test(a.mobile.trim()) && a.line1.trim() && a.city.trim() && a.state.trim() && /^\d{6}$/.test(a.pincode.trim());
+    a.name.trim() && /^\d{10}$/.test(a.mobile.trim()) && a.line1.trim() && a.area.trim() &&
+    a.post_office.trim() && a.police_station.trim() && a.city.trim() && a.state.trim() && /^\d{6}$/.test((a.pincode || "").trim());
 
   const onPaymentSuccess = async (orderId, paymentId, signature) => {
     try {
@@ -198,6 +235,10 @@ const CheckoutPage = () => {
       toast.error("Please fill a valid billing address");
       return;
     }
+    if (hasPhysical && quote && !quote.serviceable) {
+      toast.error("Delivery is not available to this pincode");
+      return;
+    }
     setPlacing(true);
     try {
       const { data: order } = await api.post("/orders", {
@@ -205,7 +246,14 @@ const CheckoutPage = () => {
         address,
         billing: sameBilling ? null : billing,
         coupon: discount > 0 ? coupon : null,
+        payment_method: paymentMethod,
       });
+      if (paymentMethod === "cod") {
+        clear();
+        toast.success("Order placed! Pay cash on delivery.");
+        navigate("/account?tab=orders");
+        return;
+      }
       const { data: pay } = await api.post("/payments/create-order", { order_id: order.id });
       if (pay.mock) {
         setPayment({ order, ...pay });
@@ -280,20 +328,47 @@ const CheckoutPage = () => {
             )}
             <div className="flex justify-between text-slate-600">
               <span>Delivery charges</span>
-              <span className={shipping === 0 ? "font-bold text-emerald-600" : ""}>{shipping === 0 ? "FREE" : inr(shipping)}</span>
+              <span className={shippingEstimate === 0 ? "font-bold text-emerald-600" : ""}>
+                {quoteLoading ? "Calculating..." : shippingEstimate === 0 ? "FREE" : inr(shippingEstimate)}
+              </span>
             </div>
+            {quote?.courier_name && quote.serviceable && (
+              <p className="text-[11px] text-slate-400" data-testid="checkout-shipping-courier">
+                via {quote.courier_name}{quote.etd ? ` • ETA ${quote.etd}` : quote.estimated_days ? ` • ~${quote.estimated_days} days` : ""}
+              </p>
+            )}
+            {quote && !quote.serviceable && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" data-testid="checkout-unserviceable">
+                {quote.message}
+              </p>
+            )}
             <div className="border-t border-slate-100 pt-2.5 flex justify-between text-base font-bold text-slate-900">
               <span>Total</span><span data-testid="checkout-total">{inr(total)}</span>
             </div>
           </div>
+          {codEligible && (
+            <div className="mt-4 rounded-xl border border-slate-200 p-3.5" data-testid="payment-method-selector">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-700">
+                  <input type="radio" name="pm" checked={paymentMethod === "prepaid"} onChange={() => setPaymentMethod("prepaid")} data-testid="pay-prepaid-radio" className="h-4 w-4 accent-red-600" />
+                  Prepaid — UPI / Cards / NetBanking / Wallets
+                </label>
+                <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-700">
+                  <input type="radio" name="pm" checked={paymentMethod === "cod"} onChange={() => setPaymentMethod("cod")} data-testid="pay-cod-radio" className="h-4 w-4 accent-red-600" />
+                  Cash on Delivery{config?.shipping?.cod_charge > 0 ? ` (+${inr(config.shipping.cod_charge)})` : ""}
+                </label>
+              </div>
+            </div>
+          )}
           <button
             data-testid="checkout-submit-btn"
             onClick={placeOrder}
-            disabled={placing || items.length === 0}
+            disabled={placing || items.length === 0 || (hasPhysical && quote && !quote.serviceable)}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-60"
           >
             {placing && <Loader2 className="h-4 w-4 animate-spin" />}
-            {placing ? "Placing order..." : `Pay ${inr(total)}`}
+            {placing ? "Placing order..." : paymentMethod === "cod" && codEligible ? `Place Order (COD) — ${inr(total)}` : `Pay ${inr(total)}`}
           </button>
           <p className="mt-3 text-center text-[11px] text-slate-400">UPI • Cards • NetBanking • Wallets via Razorpay</p>
         </div>

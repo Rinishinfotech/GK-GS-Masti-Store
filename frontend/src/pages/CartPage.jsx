@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Truck } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { PincodeChecker } from "../components/PincodeChecker";
 import { imgSrc, inr } from "../lib/api";
 import { SEO } from "../components/SEO";
 
@@ -40,7 +41,7 @@ const CartPage = () => {
                     {item.title}
                   </Link>
                   <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    {item.type === "digital" ? "PDF Download" : item.type === "both" ? "Book + PDF" : "Printed Book"}
+                    {item.type === "digital" ? "Printed Notes" : item.type === "both" ? "Book + PDF" : "Printed Book"}
                   </p>
                   <div className="mt-auto flex items-center justify-between pt-2">
                     <div className="flex items-center rounded-lg border border-slate-200">
@@ -79,7 +80,7 @@ const CartPage = () => {
               </div>
               {!hasPhysical && (
                 <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                  Digital-only order: zero delivery charges, instant access.
+                  Shipping calculated live by Shiprocket at checkout.
                 </p>
               )}
               <div className="border-t border-slate-100 pt-2.5 flex justify-between text-base font-bold text-slate-900">
@@ -94,6 +95,14 @@ const CartPage = () => {
             >
               Proceed to Checkout <ArrowRight className="h-4 w-4" />
             </button>
+            {hasPhysical && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                  <Truck className="h-3.5 w-3.5" /> Check delivery &amp; shipping rate
+                </p>
+                <PincodeChecker compact items={items.map((i) => ({ product_id: i.product_id, qty: i.qty }))} />
+              </div>
+            )}
           </div>
         </div>
       )}
