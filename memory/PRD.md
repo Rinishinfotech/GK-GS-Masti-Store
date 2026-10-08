@@ -33,6 +33,9 @@ Full e-commerce store for competitive exam books & PDF notes (Bihar Daroga, Biha
 - Checkout: new address fields (name, phone, address line 1, city, state, area/village, post office, police station, house/street optional, landmark, pincode); payment method selector (Prepaid Razorpay / COD for physical-only orders); live shipping quote with courier name + ETA.
 - Shiprocket full integration: live rates via Serviceability API on product/cart/checkout (PincodeChecker component), server-side revalidation at order placement, product weight/dims fields in admin, smart package calc (books stack), COD auto-shipment, free-shipping threshold + markup/discount + courier strategy (cheapest/fastest/manual) in admin settings, admin Shipping dashboard (connection test, settings, shipments with label/pickup/sync/retry), webhook + manual sync.
 
+## Implemented (2026-10-08, iteration 4)
+- BUSINESS RULE CHANGE: PDF notes (type "digital") are now PHYSICAL products — printed & shipped to the customer address with live Shiprocket shipping charges and auto-shipment creation. No instant download entitlement for digital products; only "Book + PDF" combos (type "both") still unlock the PDF in My Digital Materials after payment (combos are COD-blocked since the PDF unlocks instantly). COD is available for notes orders. Digital products are never out of stock ("Made to order — printed & shipped"). Verified 38/38 backend + full frontend E2E (iteration_5).
+
 ## Backlog / Next Tasks
 - P0: Real WhatsApp support number (currently placeholder 919876543210); update robots.txt sitemap URL on custom domain. Razorpay live keys are ACTIVE (2026-10-22) — real payments enabled. Shiprocket wallet recharge (min Rs.100) still pending for AWB assignment.
 - P1: Order emails/notifications (Resend), forgot-password flow, hero banners manageable from admin, coupon admin UI.

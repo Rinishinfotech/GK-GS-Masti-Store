@@ -35,9 +35,10 @@ def products():
     r = requests.get(f"{API}/products", timeout=20)
     assert r.status_code == 200
     prods = r.json()
-    physical = next(p for p in prods if p["type"] in ("physical", "both"))
+    physical = next(p for p in prods if p["type"] == "physical")
     digital = next(p for p in prods if p["type"] == "digital")
-    return {"physical": physical, "digital": digital, "all": prods}
+    combo = next((p for p in prods if p["type"] == "both"), None)
+    return {"physical": physical, "digital": digital, "combo": combo, "all": prods}
 
 
 # ---------- Shipping check (public) ----------
@@ -66,13 +67,15 @@ def test_shipping_check_invalid_pincode(products):
     assert r.status_code == 400
 
 
-def test_shipping_check_digital_only(products):
+def test_shipping_check_digital_notes_shipped(products):
+    """Digital notes are now PRINTED & SHIPPED — shipping fee must apply (>0 for serviceable pincode)."""
     body = {"pincode": "800020", "items": [{"product_id": products["digital"]["id"], "qty": 1}], "cod": False}
-    r = requests.post(f"{API}/shipping/check", json=body, timeout=20)
+    r = requests.post(f"{API}/shipping/check", json=body, timeout=40)
     assert r.status_code == 200
     d = r.json()
-    assert d.get("digital_only") is True
-    assert d.get("shipping_fee") == 0
+    assert d.get("serviceable") is True
+    assert not d.get("digital_only"), "Digital notes should NOT be treated as digital_only anymore"
+    assert d.get("shipping_fee", 0) > 0, f"Expected shipping fee > 0, got {d.get('shipping_fee')}"
 
 
 # ---------- Admin shipping settings ----------
@@ -145,7 +148,8 @@ def test_cod_order_physical_success(user_token, products):
     assert o["shipping_fee"] >= 0
 
 
-def test_cod_rejected_for_digital(user_token, products):
+def test_cod_allowed_for_digital_notes(user_token, products):
+    """Digital notes are now physical (printed & shipped) — COD must be allowed."""
     h = {"Authorization": f"Bearer {user_token}"}
     payload = {
         "items": [{"product_id": products["digital"]["id"], "qty": 1}],
@@ -156,8 +160,33 @@ def test_cod_rejected_for_digital(user_token, products):
         },
         "payment_method": "cod",
     }
+    r = requests.post(f"{API}/orders", json=payload, headers=h, timeout=60)
+    assert r.status_code == 200, r.text
+    o = r.json()
+    assert o["payment_method"] == "cod"
+    assert o["payment_status"] == "cod"
+    assert o["status"] == "confirmed"
+    assert o["shipping_fee"] > 0, "Notes orders must have shipping fee"
+    assert o.get("has_physical") is True
+    assert o.get("has_digital") is False, "Notes-only order must NOT grant digital entitlement"
+
+
+def test_cod_rejected_for_combo(user_token, products):
+    """Combo (type='both') must reject COD because PDF unlocks instantly on payment."""
+    if not products.get("combo"):
+        pytest.skip("No combo product in catalog")
+    h = {"Authorization": f"Bearer {user_token}"}
+    payload = {
+        "items": [{"product_id": products["combo"]["id"], "qty": 1}],
+        "address": {
+            "name": "COD Tester", "mobile": "9876500000",
+            "line1": "Test Line 1", "city": "Patna", "state": "Bihar",
+            "pincode": "800020",
+        },
+        "payment_method": "cod",
+    }
     r = requests.post(f"{API}/orders", json=payload, headers=h, timeout=30)
-    assert r.status_code == 400
+    assert r.status_code == 400, f"Expected 400 for COD on combo, got {r.status_code}: {r.text}"
 
 
 def test_cod_blocked_from_payment_create(user_token, products):
