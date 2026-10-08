@@ -1,0 +1,44 @@
+{
+  "summary": "Round-3 testing of Shiprocket + COD + /notes-/books pages. Backend: wrote /app/backend/tests/test_shipping.py with 12 tests — ALL PASS (serviceable 800020 returns Delhivery Surface ₹61.72 + ETA, unserviceable 999999 returns serviceable:false, invalid pincode 400, digital-only free, admin settings GET/PUT persists, invalid courier_strategy 400, Shiprocket connected status, COD physical order creates (payment_status=cod, status=confirmed, auto-shipment), COD rejected for digital 400, COD blocked from /payments/create-order 400, unserviceable pincode rejected at order creation 400). Frontend: header 'Class Notes' nav goes to /notes, 'Exam Books' to /books; chevron toggle opens nested category tree (20 category links visible); Home 'View all' hrefs = /books and /notes correct; product page pincode checker works (shows 'Delivery available to 800020 / Delhivery Surface • Shipping: ₹61.72 / Estimated delivery: Oct 12, 2026') and 999999 shows unserviceable; cart page pincode checker visible; Checkout address form shows ALL new fields in correct order (Full Name, Phone Number, Address Line 1, City, State, Area/Village, Post Office, Police Station, House/Street optional, Landmark optional, Pincode) and COD radio visible when cart all-physical; Admin /admin/shipping shows 'Shiprocket Connected' with pickup 'Home — Jamui, 811317', full settings form (free_shipping_above, markup, cod_charge, default dims), shipments table with 5 rows and sync buttons (AWB_FAILED on COD orders is expected per known wallet issue); Admin product edit modal shows Weight/Length/Breadth/Height fields for physical product. **CRITICAL DATA BUG: /notes page shows 0 products** — all 6 digital notes products have category_id='b3d5584273c54195b8f9fa344111d789' (plain 32-char hex, no dashes) which does NOT match any current category id in db.categories (all categories use UUID with dashes like 'f663eb3a-...'). API GET /api/products?kind=notes correctly returns [] because the backend's category_id lookup finds no match for the notes group. This breaks the entire Class Notes browse flow and the Latest Notes homepage section may also be impacted.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/products?kind=notes", "issue": "Returns 0 products. All 6 digital note products have stale category_id='b3d5584273c54195b8f9fa344111d789' (32-hex, no dashes) that does not exist in db.categories (which use UUID-with-dashes). GET /api/products/<slug> for notes products returns category:null. /notes page is empty.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "GroupPage (/notes)", "issue": "Shows 'No products here yet' / '0 products available' due to backend data bug above", "selector": "[data-testid=\"notes-page\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_shipping.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/shipping_results.xml",
+    "/app/test_reports/pytest/regression_results.xml"
+  ],
+  "action_items": [
+    "FIX: Re-seed or migrate the 6 digital notes products so their category_id points to a valid 'notes'-group category (e.g. the matching UUID in db.categories). Likely the seed script uses uuid.uuid4().hex for categories but uuid4() (with dashes) elsewhere, or an older seed left orphan refs. After fix, verify GET /api/products?kind=notes returns >=6 items and /notes page shows cards.",
+    "LOW: backend_test.py still asserts d['mock'] is True in test_payment_create_and_verify; since Razorpay is now LIVE, 4 old regression tests (test_payment_create_and_verify, test_downloads_after_paid, test_my_orders, test_admin_customers) cascade-fail. These are stale TEST assertions, not product bugs — rewrite to use order-only flow and skip the mock-pay-verify path when live keys are configured."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1675 lines — split into routers (shipping, admin, orders, products, auth) for maintainability.",
+    "Products endpoint silently returns category:null for products whose category_id does not resolve — consider adding a startup data-integrity check that logs orphan category_id references so this kind of seed drift surfaces immediately.",
+    "quote_shipping is called inside create_order with raw subtotal-discount — good — but no explicit log of the frontend-vs-recomputed-shipping delta; add a WARN log if frontend-sent shipping differs by >₹5 so tampering attempts are visible."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_shipping.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% on new shipping suite (12/12). Regression 21/25 (4 pre-existing stale-mock tests)",
+    "frontend": "~90% — all new features work EXCEPT /notes page is empty due to backend data bug"
+  },
+  "test_credentials": "learner@test.com / test123 and palakneuroclinic@gmail.com / Admin@123 both work.",
+  "seed_data_creation": "test_shipping.py created 3 COD orders for learner@test.com (one per run of test_cod_order_physical_success and test_cod_blocked_from_payment_create). Visible in admin shipments table as GKGS1021/1023/1024, all AWB_FAILED (expected). Safe to leave or delete.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The /notes bug is purely a data mismatch — category_id on digital products stored as 32-char hex without dashes, while categories collection has UUIDs with dashes. Check /app/backend/server.py seed function and /app/backend/seed*.py scripts for uuid.uuid4().hex vs str(uuid.uuid4()) inconsistency. All Shiprocket/COD flows are working end-to-end (shipment creation succeeds, AWB fails due to known wallet-recharge issue — do not treat AWB_FAILED as a bug). Razorpay is LIVE — never complete a prepaid payment; use COD for e2e order tests. Checkout UI, admin shipping page, product-dim fields, chevron dropdowns, 'View all' home links, and public shipping-check endpoint are all verified working.",
+  "rca of the issue": "CAUSE: Digital notes products in db.products carry category_id='b3d5584273c54195b8f9fa344111d789' which is a UUID stored as .hex (no dashes). The categories collection stores ids as str(uuid.uuid4()) (with dashes), so categories.find_one({id: <no-dash>}) finds nothing. EFFECT: list_products(kind='notes') filters query['category_id'] = {'$in': <uuid-with-dash list>}, matching 0 products. STEPS TO REPRODUCE: curl $URL/api/products?kind=notes -> []; curl $URL/api/products/bihar-daroga-complete-handwritten-notes-pdf -> category:null, category_id is 32-hex. MITIGATION: migrate db.products: for each notes product update category_id to the matching uuid.UUID(hex).__str__() form, or reseed the whole catalog with consistent id format. Simplest fix: in backend startup, run a migration that converts any 32-char hex category_id to the dashed form via str(uuid.UUID(hex))."
+}
