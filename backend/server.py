@@ -990,7 +990,7 @@ def map_sr_status(status_raw: str):
 
 @api_router.post("/shipping/events")
 async def shiprocket_webhook(request: Request):
-    if request.headers.get("x-api-key") != SHIPROCKET_WEBHOOK_SECRET:
+    if not SHIPROCKET_WEBHOOK_SECRET or request.headers.get("x-api-key") != SHIPROCKET_WEBHOOK_SECRET:
         raise HTTPException(401, "Invalid webhook key")
     event = await request.json()
     order_number = str(event.get("order_id") or "")
