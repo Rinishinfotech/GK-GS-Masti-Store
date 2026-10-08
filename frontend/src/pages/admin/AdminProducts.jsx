@@ -19,6 +19,10 @@ const emptyForm = {
   spec_language: "Hindi",
   spec_pages: "",
   spec_edition: "2026",
+  weight: "",
+  ship_length: "",
+  ship_breadth: "",
+  ship_height: "",
 };
 
 const FileInput = ({ label, kind, onUploaded, testid }) => {
@@ -96,6 +100,10 @@ const AdminProducts = () => {
       spec_language: p.specs?.language || "Hindi",
       spec_pages: p.specs?.pages || "",
       spec_edition: p.specs?.edition || "2026",
+      weight: p.weight ?? "",
+      ship_length: p.length ?? "",
+      ship_breadth: p.breadth ?? "",
+      ship_height: p.height ?? "",
     });
     setOpen(true);
   };
@@ -118,6 +126,10 @@ const AdminProducts = () => {
         sample_pdf: form.sample_pdf,
         full_pdf: form.full_pdf,
         specs: { language: form.spec_language, pages: form.spec_pages, publisher: "GK GS Masti", edition: form.spec_edition },
+        weight: form.weight ? parseFloat(form.weight) : null,
+        length: form.ship_length ? parseFloat(form.ship_length) : null,
+        breadth: form.ship_breadth ? parseFloat(form.ship_breadth) : null,
+        height: form.ship_height ? parseFloat(form.ship_height) : null,
       };
       if (editing) {
         await api.put(`/admin/products/${editing.id}`, payload);
@@ -320,6 +332,19 @@ const AdminProducts = () => {
                 </>
               )}
             </div>
+            {form.type !== "digital" && (
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Shipping (used for live rate calculation)</p>
+                <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+                  {[["weight", "Weight (kg)"], ["ship_length", "Length (cm)"], ["ship_breadth", "Breadth (cm)"], ["ship_height", "Height (cm)"]].map(([k, label]) => (
+                    <div key={k}>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
+                      <input data-testid={`product-${k}-input`} type="number" step="0.1" min="0" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {form.cover && (
               <img src={imgSrc(form.cover)} alt="cover" className="h-24 w-24 rounded-xl object-cover border border-slate-200" onError={(e) => { e.target.onerror = null; e.target.src = imgSrc(""); }} />
             )}

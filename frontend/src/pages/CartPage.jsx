@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Truck } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { PincodeChecker } from "../components/PincodeChecker";
 import { imgSrc, inr } from "../lib/api";
 import { SEO } from "../components/SEO";
 
@@ -94,6 +95,14 @@ const CartPage = () => {
             >
               Proceed to Checkout <ArrowRight className="h-4 w-4" />
             </button>
+            {hasPhysical && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                  <Truck className="h-3.5 w-3.5" /> Check delivery &amp; shipping rate
+                </p>
+                <PincodeChecker compact items={items.map((i) => ({ product_id: i.product_id, qty: i.qty }))} />
+              </div>
+            )}
           </div>
         </div>
       )}

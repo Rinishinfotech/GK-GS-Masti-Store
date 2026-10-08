@@ -73,7 +73,7 @@ const Home = () => {
               <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Handpicked</p>
               <h2 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Featured Books</h2>
             </div>
-            <Link to="/category/books/bihar-daroga" className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700">
+            <Link to="/books" className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700">
               View all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -90,7 +90,7 @@ const Home = () => {
               <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Instant Download</p>
               <h2 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Latest Notes</h2>
             </div>
-            <Link to="/category/notes/bihar-daroga" className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700">
+            <Link to="/notes" className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700">
               View all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

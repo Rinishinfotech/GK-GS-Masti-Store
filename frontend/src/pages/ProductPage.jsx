@@ -6,6 +6,7 @@ import { api, imgSrc, inr, formatApiError } from "../lib/api";
 import { SEO } from "../components/SEO";
 import { Stars, ProductCard } from "../components/ProductCard";
 import { SamplePdfModal } from "../components/SamplePdfModal";
+import { PincodeChecker } from "../components/PincodeChecker";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useAuth } from "../context/AuthContext";
@@ -188,6 +189,15 @@ const ProductPage = () => {
             )}
             <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-amber-500" /> Secure payment</span>
           </div>
+
+          {product.type !== "digital" && (
+            <div className="mt-5 max-w-sm rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <Truck className="h-3.5 w-3.5" /> Check delivery &amp; shipping rate
+              </p>
+              <PincodeChecker compact items={[{ product_id: product.id, qty }]} />
+            </div>
+          )}
         </div>
       </div>
 

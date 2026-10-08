@@ -28,6 +28,11 @@ Full e-commerce store for competitive exam books & PDF notes (Bihar Daroga, Biha
 - Shiprocket shipping: auto shipment creation after payment for physical orders, AWB/courier auto-assign with retry (admin "Create Shiprocket Shipment" button), live tracking in customer My Orders (Track Shipment), webhook POST /api/shiprocket/webhook (x-api-key) auto-updates order status, pickup location "Patna" created via API. AWB blocked until Shiprocket wallet recharge (min Rs.100).
 - Sub-categories: parent_id support, nested header dropdowns/mobile menu, admin "+ Sub Category" flow, parent pages include sub products.
 
+## Implemented (2026-10-08, iteration 3)
+- Storefront: clickable Class Notes (/notes) and Exam Books (/books) menu pages listing all products of each kind; Home "View all" links point to them; header labels renamed.
+- Checkout: new address fields (name, phone, address line 1, city, state, area/village, post office, police station, house/street optional, landmark, pincode); payment method selector (Prepaid Razorpay / COD for physical-only orders); live shipping quote with courier name + ETA.
+- Shiprocket full integration: live rates via Serviceability API on product/cart/checkout (PincodeChecker component), server-side revalidation at order placement, product weight/dims fields in admin, smart package calc (books stack), COD auto-shipment, free-shipping threshold + markup/discount + courier strategy (cheapest/fastest/manual) in admin settings, admin Shipping dashboard (connection test, settings, shipments with label/pickup/sync/retry), webhook + manual sync.
+
 ## Backlog / Next Tasks
 - P0: Real WhatsApp support number (currently placeholder 919876543210); update robots.txt sitemap URL on custom domain. Razorpay live keys are ACTIVE (2026-10-22) — real payments enabled. Shiprocket wallet recharge (min Rs.100) still pending for AWB assignment.
 - P1: Order emails/notifications (Resend), forgot-password flow, hero banners manageable from admin, coupon admin UI.

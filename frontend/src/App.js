@@ -6,7 +6,9 @@ import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { Layout } from "@/components/Layout";
 import Home from "@/pages/Home";
+import GroupPage from "@/pages/GroupPage";
 import CategoryPage from "@/pages/CategoryPage";
+import AdminShipping from "@/pages/admin/AdminShipping";
 import SearchPage from "@/pages/SearchPage";
 import ProductPage from "@/pages/ProductPage";
 import CartPage from "@/pages/CartPage";
@@ -48,6 +50,8 @@ function App() {
                 <Route element={<Layout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/category/:group/:slug" element={<CategoryPage />} />
+                  <Route path="/notes" element={<GroupPage kind="notes" />} />
+                  <Route path="/books" element={<GroupPage kind="books" />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/product/:slug" element={<ProductPage />} />
                   <Route path="/cart" element={<CartPage />} />
@@ -66,6 +70,7 @@ function App() {
                   <Route path="products" element={<AdminProducts />} />
                   <Route path="categories" element={<AdminCategories />} />
                   <Route path="orders" element={<AdminOrders />} />
+                  <Route path="shipping" element={<AdminShipping />} />
                   <Route path="customers" element={<AdminCustomers />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
